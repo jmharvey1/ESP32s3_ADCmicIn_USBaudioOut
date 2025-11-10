@@ -16,7 +16,8 @@
 #include "lv_port_disp.h"
 #include "lvgl/src/lv_api_map_v9_1.h"
 #include "lvgl/src/core/lv_refr.h"
-
+/*Added to support updating saved NVS user settings */
+#include "NVS_Suprt.h"
 
 #include <stdio.h>
 
@@ -60,6 +61,9 @@ bool TWO_STAGE = false;
 bool ESP_SR = false;
 unsigned long LastStart1 = 0;
 int NoiseSupprLvl = 0;
+
+NVS_Suprt nvs_suprt2; // Create an instance of the NVS_Suprt class
+
 static void textarea_event_handler(lv_event_t *e);
 void Update_textarea(lv_obj_t *TxtArea, char bufChar);
 void DisplayTask(void *param);
@@ -208,9 +212,16 @@ static void btn2_event_handler(lv_event_t * e)
         uint16_t interval = (uint16_t)(EvntStart - LastStart1);
         LastStart1 = EvntStart;
         if(interval< 1000) return;
-        TWO_STAGE = !TWO_STAGE;
-        if(!TWO_STAGE) lv_label_set_text(Btn2_label, "IIR OFF");
-        else lv_label_set_text(Btn2_label, "IIR ON");
+        AudioOutMode++;
+        if(AudioOutMode > 1) AudioOutMode = 0;
+        nvs_suprt2.nvs_write_val("AudioOutMode", AudioOutMode);
+        if(AudioOutMode == 0){ //AudioOutMode; //0=I2S PDM, 1=USB Audio
+
+            lv_label_set_text(Btn2_label, "I2S/PDM");
+        }
+        else{
+            lv_label_set_text(Btn2_label, "USB/UAC");
+        }
     }
     else if(code == LV_EVENT_VALUE_CHANGED) {
         LV_LOG_USER("Toggled");
@@ -412,14 +423,21 @@ void Bld_Scope_scrn(void)
         lv_label_set_text(Btn1_label, "NR ON");
         lv_obj_center(Btn1_label);
 
-        // lv_obj_t *btn2 = lv_win_add_button(win2, LV_SYMBOL_DUMMY, 100);
-        // lv_obj_add_event_cb(btn2, btn2_event_handler, LV_EVENT_ALL, NULL);
-        // lv_obj_align(btn2, LV_ALIGN_CENTER, 150, -40);
-        // lv_obj_remove_flag(btn2, LV_OBJ_FLAG_PRESS_LOCK);
+        lv_obj_t *btn2 = lv_win_add_button(win2, LV_SYMBOL_DUMMY, 100);
+        lv_obj_add_event_cb(btn2, btn2_event_handler, LV_EVENT_ALL, NULL);
+        lv_obj_align(btn2, LV_ALIGN_CENTER, 150, -40);
+        lv_obj_remove_flag(btn2, LV_OBJ_FLAG_PRESS_LOCK);
 
-        // Btn2_label = lv_label_create(btn2);
-        // lv_label_set_text(Btn2_label, "IIR OFF");
-        // lv_obj_center(Btn2_label);
+        Btn2_label = lv_label_create(btn2);
+        if(AudioOutMode == 0){ //AudioOutMode; //0=I2S PDM, 1=USB Audio
+
+            lv_label_set_text(Btn2_label, "I2S/PDM");
+        }
+        else{
+            lv_label_set_text(Btn2_label, "USB/UAC");
+        }
+        //lv_label_set_text(Btn2_label, "IIR OFF");
+        lv_obj_center(Btn2_label);
     }
 
     lv_scr_load(ui_Scope);

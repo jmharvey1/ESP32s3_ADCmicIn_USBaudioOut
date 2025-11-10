@@ -33,7 +33,9 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 // - Used modern C++ features where possible, but kept compatibility with ESP-IDF and FreeRTOS
 
 // Note: Some ESP-IDF APIs are C-based and require C-style code, so not all C++ best practices can be applied.
-
+/*20251109 added display button to support swapping Audio Output modes I2s-PDM/USB-UAC 
+*        Note: to complete the swap, a 'reset', or 'power off/power on' operation has to follow the button selection
+*/
 #include <stdio.h>
 #include <inttypes.h>
 #include <cmath>
@@ -66,7 +68,9 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 #include "lvgl/src/widgets/chart/lv_chart_private.h"
 
 #include "voice_nr.h"
-
+// save settings to NVS
+#include "NVS_Suprt.h"
+// Global configuration flags
 #define I2S_PDM_TX_PIN_CLK GPIO_NUM_43 //USE Waveshare UART2 TX as PDM clock out(Audio out)
 #define I2S_PDM_TX_PIN_DATA GPIO_NUM_44 //USE Waveshare UART2 RX as PDM data out(Audio out)
 #define I2S_PDM_TX_CHANNEL  I2S_NUM_0 // PDM TX is only supported on I2S0 on ESP32-S3
@@ -159,8 +163,12 @@ const uint8_t *p2 = &audio_Rbuffer[0];
 void *audio_RbufferPtr = (void *)p2;
 int byteStep = sizeof(int16_t);
 int i2s_sample_size = sizeof(i2s_samples);
-VoiceNR voiceNR(&audio_Rbuffer[0], AucRB_len); // Create an instance of the VoiceNR class
+int AudioOutMode = 0; //0=I2S PDM, 1=USB Audio  
 
+VoiceNR voiceNR(&audio_Rbuffer[0], AucRB_len); // Create an instance of the VoiceNR class
+NVS_Suprt nvs_suprt; // Create an instance of the NVS_Suprt class
+
+///////////////////////////////////////////////////////////////////
 void i2s_write_task(void *arg) {
     esp_err_t ret;
     while (i2s_pdm_running) {
@@ -897,8 +905,46 @@ static void uac_device_set_volume_cb(uint32_t volume, void *arg)
 
 void app_main()
 {
+    //vTaskDelay(pdMS_TO_TICKS(4000));
     printf("app_main: running\n");
-    char TxtBuf[50];
+    char TxtBuf[60];
+
+    /* test/check NVS to see if user setting/param have been stored */
+    nvs_result_t Rstat = nvs_suprt.nvs_init();
+    if (Rstat != NVS_OK)
+    {
+        /*No settings found; load factory settings*/
+        printf("\nNVS FAILED TO INITIALIZE\n");
+       
+    }
+    else
+    {
+        printf("\nNVS initialized OK\n");
+        //vTaskDelay(pdMS_TO_TICKS(1250));
+        Rstat = nvs_suprt.get_AudioOutMode(AudioOutMode);//nvs_suprt.nvs_read_val("AudioOutMode", AudioOutMode);
+        if (Rstat != NVS_OK)
+        {
+            /*No settings found; load factory settings*/
+            printf("\nNo stored USER params Found\nUsing default PDM output\n");
+
+            // if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+            // {
+            //     Print2Dsply(TxtBuf);
+            //     xSemaphoreGive(Txt2Dsply_mutx);
+            // }
+            nvs_suprt.SaveUsrVals(); // save default to NVS
+        }
+        else
+        {
+            /*found 'AudioOutMode' stored setting, go get the other user settings */
+            printf("\nFound 'AudioOutMode' stored setting: %d\n", AudioOutMode);
+            int strdAT;
+            // Rstat = Read_NVS_Str("MemF2", DFault.MemF2);
+            // Rstat = Read_NVS_Val("NiteMode", strdAT);
+            // DFault.NiteMode = (bool)strdAT;
+            //
+        }
+    }
     Txt_GUI_init();
     vTaskDelay(pdMS_TO_TICKS(50));
     // Initialize ESP Voice Noise Reduction AFE (nsnet2 noise suppression model)
@@ -937,16 +983,16 @@ void app_main()
     //     vTaskDelay(pdMS_TO_TICKS(5000));
     // }
     vTaskDelay(pdMS_TO_TICKS(1000)); // this here to allow time for the I2C gt911 touch screen to report before starting USB
-    
-    if (true) //set to true to enable I2S PDM TX mode; set to false to use USB UAC mode
+
+    if (AudioOutMode == 0) // set to 0 to enable I2S PDM TX mode; set to 1 to use USB UAC mode
     {
         /* I2S to PDM TX channel setup
-        * Configures and starts the I2S PDM TX channel:
-        * - Builds an i2s_chan_config_t and creates a channel with i2s_new_channel.
-        * - Prepares PDM TX clock and slot configuration (uses DAC default clock
-        *   config macro and 16-bit mono PCM slot).
-        * - Copies clock/slot defaults into the tx_cfg and initializes PDM TX mode.
-        */
+         * Configures and starts the I2S PDM TX channel:
+         * - Builds an i2s_chan_config_t and creates a channel with i2s_new_channel.
+         * - Prepares PDM TX clock and slot configuration (uses DAC default clock
+         *   config macro and 16-bit mono PCM slot).
+         * - Copies clock/slot defaults into the tx_cfg and initializes PDM TX mode.
+         */
 
         i2s_chan_config_t chan_cfg = {
             .id = I2S_PDM_TX_CHANNEL,
@@ -1005,9 +1051,8 @@ void app_main()
         i2s_pdm_running = true;
         // Create I2S write task
         xTaskCreatePinnedToCore(i2s_write_task, "i2s_write_task", 2048, NULL, 5, &i2s_task_handle, 0);
-        
     }
-    else 
+    else
     {
         i2s_pdm_running = false;
         /*Setup/configure USB for UAC operation */
@@ -1081,3 +1126,261 @@ static void Calc_IIR_BPFltrCoef(float Fc, float Fs, float Q)
     b1 = 2.0f * (K * K - 1.0f) * norm;
     b2 = (1.0f - K / Q + K * K) * norm;
 }
+///////////////////////////////////////////
+// uint8_t Write_NVS_Val(const char *key, int value)
+// /* write numeric data to NVS; If the data is "stored",return with an exit status of "1" */
+// {
+//   uint8_t stat = 0;
+//   char TxtBuf[50];
+//   // const uint16_t* p = (const uint16_t*)(const void*)&value;
+//   //  Handle will automatically close when going out of scope or when it's reset.
+//   std::unique_ptr<nvs::NVSHandle> handle = nvs::open_nvs_handle("storage", NVS_READWRITE, &ret);
+//   if (ret != ESP_OK)
+//   {
+//     sprintf(TxtBuf, "Error (%s) opening WRITE NVS value handle for: %s!\n", esp_err_to_name(ret), key);
+//     if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+//         {
+//             Print2Dsply(TxtBuf);
+//             xSemaphoreGive(Txt2Dsply_mutx);
+//         }
+//   }
+//   else
+//   {
+//     ret = handle->set_item(key, value);
+//     switch (ret)
+//     {
+//     case ESP_OK:
+//       ret = handle->commit();
+//       if (ret != ESP_OK)
+//       {
+//         sprintf(TxtBuf, "Commit Failed (%s) on %s!\n", esp_err_to_name(ret), key);
+//         if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+//         {
+//             Print2Dsply(TxtBuf);
+//             xSemaphoreGive(Txt2Dsply_mutx);
+//         }
+//       }
+//       else
+//         /* exit point when everything works as it should */
+//         stat = 1;
+//       break;
+//     default:
+//       sprintf(TxtBuf, "Error (%s) reading %s!\n", esp_err_to_name(ret), key);
+//       if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+//         {
+//             Print2Dsply(TxtBuf);
+//             xSemaphoreGive(Txt2Dsply_mutx);
+//         }
+//       //delay(3000);
+//       vTaskDelay(pdMS_TO_TICKS(3000));
+//     }
+//   }
+//   return stat;
+// }
+// ////////////////////////////////////////////
+// /*Save data to NVS memory routines*/
+
+// uint8_t Write_NVS_Str(const char *key, char *value)
+// /* write string data to NVS */
+// {
+//   char TxtBuf[50];  
+//   uint8_t stat = 0;
+//   //  Handle will automatically close when going out of scope or when it's reset.
+//   std::unique_ptr<nvs::NVSHandle> handle = nvs::open_nvs_handle("storage", NVS_READWRITE, &ret);
+//   if (ret != ESP_OK)
+//   {
+//     // printf("Error (%s) opening NVS handle!\n", esp_err_to_name(ret));
+//     sprintf(TxtBuf, "Error (%s) opening WRITE NVS string handle for: %s!\n", esp_err_to_name(ret), key);
+//     if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+//         {
+//             Print2Dsply(TxtBuf);
+//             xSemaphoreGive(Txt2Dsply_mutx);
+//         }
+//   }
+//   else
+//   {
+
+//     ret = handle->set_string(key, value);
+//     switch (ret)
+//     {
+//     case ESP_OK:
+//       /* write operation worked; go ahead and /lock the data in */
+//       ret = handle->commit();
+//       if (ret != ESP_OK)
+//       {
+//         sprintf(TxtBuf, "Commit Failed (%s) on %s!\n", esp_err_to_name(ret), key);
+//         if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+//         {
+//             Print2Dsply(TxtBuf);
+//             xSemaphoreGive(Txt2Dsply_mutx);
+//         }
+//       }
+//       else
+//       {
+//         /* exit point when everything works as it should */
+//         stat = 1;
+//         break;
+//       }
+//     default:
+//       sprintf(TxtBuf, "Error (%s) reading %s!\n", esp_err_to_name(ret), key);
+//       if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+//         {
+//             Print2Dsply(TxtBuf);
+//             xSemaphoreGive(Txt2Dsply_mutx);
+//         }
+//       //delay(3000);
+//       vTaskDelay(pdMS_TO_TICKS(3000));
+//     }
+//   }
+//   return stat;
+// }
+// /////////////////////////////////////////////////////////////
+// uint8_t Read_NVS_Val(const char *key, int &value)
+// /* read numeric data from NVS; If the data is "found",return with an exit status of "1" */
+// {
+//   uint8_t stat = 0;
+//   char TxtBuf[50];
+//   //  Handle will automatically close when going out of scope or when it's reset.
+//   std::unique_ptr<nvs::NVSHandle> handle = nvs::open_nvs_handle("storage", NVS_READONLY, &ret);
+//   if (ret != ESP_OK)
+//   {
+//     sprintf(TxtBuf, "Error (%s) opening READ NVS value handle for: %s!\n", esp_err_to_name(ret), key);
+//     if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+//         {
+//             Print2Dsply(TxtBuf);
+//             xSemaphoreGive(Txt2Dsply_mutx);
+//         }
+//   }
+//   else
+//   {
+//     ret = handle->get_item(key, value);
+//     switch (ret)
+//     {
+//     case ESP_OK:
+//       /* exit point when everything works as it should */
+//       stat = 1;
+//       break;
+//     case ESP_ERR_NVS_NOT_FOUND:
+//       sprintf(TxtBuf, "The value for %s is not initialized yet!\n", key);
+//       if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+//         {
+//             Print2Dsply(TxtBuf);
+//             xSemaphoreGive(Txt2Dsply_mutx);
+//         }
+//       break;
+//     default:
+//       sprintf(TxtBuf, "Error (%s) reading %s!\n", esp_err_to_name(ret), key);
+//       if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+//         {
+//             Print2Dsply(TxtBuf);
+//             xSemaphoreGive(Txt2Dsply_mutx);
+//         }
+//       //delay(3000);
+//       vTaskDelay(pdMS_TO_TICKS(3000));
+//     }
+//   }
+//   return stat;
+// }
+// /////////////////////////////////////////////////////
+// /* the following code handles the read from & write to NVS processes needed to handle the User CW prefences/settings  */
+
+// uint8_t Read_NVS_Str(const char *key, char *value)
+// /* read string data from NVS*/
+// {
+//   uint8_t stat = 0;
+//   char TxtBuf[50];
+//   // const uint16_t* p = (const uint16_t*)(const void*)&value;
+//   //  Handle will automatically close when going out of scope or when it's reset.
+//   std::unique_ptr<nvs::NVSHandle> handle = nvs::open_nvs_handle("storage", NVS_READWRITE, &ret);
+//   if (ret != ESP_OK)
+//   {
+//     sprintf(TxtBuf, "Error (%s) opening READ NVS string handle for: %s!\n", esp_err_to_name(ret), key);
+//     if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+//         {
+//             Print2Dsply(TxtBuf);
+//             xSemaphoreGive(Txt2Dsply_mutx);
+//         }
+//   }
+//   else
+//   {
+//     size_t required_size;
+//     ret = handle->get_item_size(nvs::ItemType::SZ, key, required_size);
+//     switch (ret)
+//     {
+//     case ESP_OK:
+
+//       if (required_size > 0 && required_size < 100)
+//       {
+//           char temp[100];
+//           ret = handle->get_string(key, temp, required_size);
+//           int i;
+//           for (i = 0; i < 100; i++)
+//           {
+//               value[i] = temp[i];
+//               if (temp[i] == 0)
+//                   break;
+//           }
+
+//           sprintf(TxtBuf, "%d characters copied to %s\n", i, key);
+//           if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+//           {
+//               Print2Dsply(TxtBuf);
+//               xSemaphoreGive(Txt2Dsply_mutx);
+//           }
+
+//           stat = 1;
+//       }
+//       break;
+//     case ESP_ERR_NVS_NOT_FOUND:
+//       /*TODO could need support code here*/
+//       break;
+//     default:
+//       sprintf(TxtBuf, "Error (%s) reading %s!\n", esp_err_to_name(ret), key);
+//       if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+//         {
+//             Print2Dsply(TxtBuf);
+//             xSemaphoreGive(Txt2Dsply_mutx);
+//         }
+//       //delay(3000);
+//       vTaskDelay(pdMS_TO_TICKS(3000));
+//     }
+//   }
+//   return stat;
+// }
+// /////////////////////////////////////////////////////////////
+// void SaveUsrVals(void)
+// {
+// 	/* Unlock the Flash Program Erase controller */
+// 	char buf[30];
+// 	bool GudFlg = true;
+// 	char call[10];
+// 	char mem[80];
+// 	int i;
+// 	uint8_t Rstat;
+// 	bool zeroFlg = false;
+// 	/*Save Debug Setting*/
+// 	Rstat = Write_NVS_Val("AudioOutMode", AudioOutMode);
+// 	if (Rstat != 1)
+// 		GudFlg = false;
+// 	/* Save current Decoder NiteMode value */
+	
+// 	if (GudFlg)
+// 	{
+// 		sprintf(buf, "User Params SAVED");
+// 		if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+//         {
+//             Print2Dsply(buf);
+//             xSemaphoreGive(Txt2Dsply_mutx);
+//         }
+// 	}
+// 	else
+// 	{
+// 		sprintf(buf, "SAVE FAILED");
+// 		if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
+//         {
+//             Print2Dsply(buf);
+//             xSemaphoreGive(Txt2Dsply_mutx);
+//         }
+// 	}
+// }
+// ////////////////////////////////////////////////////////////

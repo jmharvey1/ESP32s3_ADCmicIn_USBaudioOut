@@ -4,7 +4,7 @@ And after DSP, can output the 'processed' data in two formats:
 A. as a USB UAC 16Khz single chanel audio.  
 B. as an analog (PDM) signal (~1Vp-p) via Waveshare's UART2 RX lead.  
 Note: Only one output mode is available at a time, and is NOT switchable 'on the fly'. 
-But can be changed, with a single true/false flag, in the 'main entry' code.  
+But can be changed, using 2nd Display button(I2S/PDM), followed by a board 'reset'.  
 Currently there are 4 DSP modes (which are switchable 'on the fly'):
 1. Straight pass though.
 2. IIR filter (~300hz BW, centered @ 750Hz).
