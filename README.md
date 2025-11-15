@@ -1,5 +1,5 @@
 This ESPIDF project written in 'C' & 'C++', uses Waveshare's 7" display/ESP32s3.  
-As the project name suggests, it accepts an analog audio signal (~2Vp-p) input, via the Waveshare's Analog senor jack.
+As the project name suggests, it accepts an analog audio signal (~2Vp-p) input, via the Waveshare's Analog sensor jack.
 And after DSP, can output the 'processed' data in two formats:  
 A. as a USB UAC 16Khz single chanel audio.  
 B. as an analog (PDM) signal (~1Vp-p) via Waveshare's UART2 RX lead.  

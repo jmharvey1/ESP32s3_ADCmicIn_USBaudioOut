@@ -1,3 +1,4 @@
+/*20251115 Changed Button1 event detectioin to 'LV_EVENT_SHORT_CLICKED' to reduce false detections*/
 #include "Text2Dsply.h"
 #include "stdint.h" // need this to use char type
 #include "esp_log.h"
@@ -161,13 +162,13 @@ static void btn1_event_handler(lv_event_t * e)
 {
     lv_event_code_t code = lv_event_get_code(e);
 
-    if(code == LV_EVENT_CLICKED) {
+    if(code == LV_EVENT_SHORT_CLICKED) { //LV_EVENT_CLICKED) {
         /*Following 4 lines act as a button 'de-bounce' circuit*/
         unsigned long EvntStart = pdTICKS_TO_MS(xTaskGetTickCount());
         uint16_t interval = (uint16_t)(EvntStart - LastStart1);
-        //printf("Interval=%d ms\n", interval);
-        if(interval < 500) return;
+        // if(interval < 500) return;
         LastStart1 = EvntStart;
+        if(interval< 1000) return;
         NoiseSupprLvl++;
         if(NoiseSupprLvl > 3) NoiseSupprLvl = 0;
         switch (NoiseSupprLvl){
@@ -420,7 +421,7 @@ void Bld_Scope_scrn(void)
         lv_obj_remove_flag(btn1, LV_OBJ_FLAG_PRESS_LOCK);
 
         Btn1_label = lv_label_create(btn1);
-        lv_label_set_text(Btn1_label, "NR ON");
+        lv_label_set_text(Btn1_label, "WIENER");
         lv_obj_center(Btn1_label);
 
         lv_obj_t *btn2 = lv_win_add_button(win2, LV_SYMBOL_DUMMY, 100);

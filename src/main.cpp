@@ -36,6 +36,7 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 /*20251109 added display button to support swapping Audio Output modes I2s-PDM/USB-UAC 
 *        Note: to complete the swap, a 'reset', or 'power off/power on' operation has to follow the button selection
 */
+/* 20251115 Text2Dsply.cpp - Changed Button1 event detectioin to 'LV_EVENT_SHORT_CLICKED' to reduce false detections*/
 #include <stdio.h>
 #include <inttypes.h>
 #include <cmath>
@@ -340,7 +341,7 @@ void wiener_filter_process(float* input, float* output)
     // Pseudo Inverse FFT
     AvgTone = ((Bstfreq) * 0.4f) + (AvgTone * 0.6f); //smooth tone freq
     float fr = 2 * M_PI * ((AvgTone) / SAMPLING_RATE);
-    int cntr = 0; //for debugging
+    //int cntr = 0; //for debugging
     float curMag = 0.0f;
     for (int i = 0; i < FFT_SIZE; i++)
     {
@@ -361,7 +362,9 @@ void wiener_filter_process(float* input, float* output)
         if(curMag > 2000.0f) curMag = 2000.0f;    
         if(gain == 0.0f || curMag<50 ) curMag = 0.0f;
         AvgMag = curMag * 0.1f + AvgMag * 0.9f; //smooth output
-        //printf("%0.0f\n", AvgMag);
+        // if(i % 32 == 0){
+        //     printf("%0.0f\n", AvgMag);
+        // }
         if(AvgMag < 5.0f)
         {ph = 0.0f;}
         output[i] = AvgMag * sin(ph); // compute tone data sample using geortzel magnitude FFT bin/freq with largest magnitude
@@ -558,6 +561,7 @@ void Read_ADC(void *param)
                                 float real = w1 * a + w2 * c;
                                 float imag = (w1 * b + w2 * d);
                                 float magnitude = sqrtf(real * real + imag * imag) / 25.0f; // normalize
+                                //printf("%0.0f\n", magnitude);
                                 /*Reset Goertzel for next block*/
                                 GoetzelCnt = 0;
                                 w1 = w2 = 0.0f;
@@ -926,24 +930,15 @@ void app_main()
         {
             /*No settings found; load factory settings*/
             printf("\nNo stored USER params Found\nUsing default PDM output\n");
-
-            // if (pdTRUE == xSemaphoreTake(Txt2Dsply_mutx, pdMS_TO_TICKS(500)))
-            // {
-            //     Print2Dsply(TxtBuf);
-            //     xSemaphoreGive(Txt2Dsply_mutx);
-            // }
             nvs_suprt.SaveUsrVals(); // save default to NVS
         }
         else
         {
             /*found 'AudioOutMode' stored setting, go get the other user settings */
             printf("\nFound 'AudioOutMode' stored setting: %d\n", AudioOutMode);
-            int strdAT;
-            // Rstat = Read_NVS_Str("MemF2", DFault.MemF2);
-            // Rstat = Read_NVS_Val("NiteMode", strdAT);
-            // DFault.NiteMode = (bool)strdAT;
-            //
-        }
+            //int strdAT;
+            //nvs_suprt.get_StdAFCfg(strdAT);//nvs_suprt.nvs_read_val("StdAFCfg", strdAT);
+            }
     }
     Txt_GUI_init();
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -1005,13 +1000,14 @@ void app_main()
         esp_err_t ret = i2s_new_channel(&chan_cfg, &tx_handle, NULL);
         if (ret != ESP_OK)
         {
-            ESP_LOGE("PDM_TX_EXAMPLE", "Failed to create I2S PDM TX channel: %s", esp_err_to_name(ret));
+            ESP_LOGE("PDM_TX", "Failed to create I2S PDM TX channel: %s", esp_err_to_name(ret));
             return;
         }
         // I2S PDM TX configuration
-        // i2s_pdm_tx_clk_config_t clk_cfg = I2S_PDM_TX_CLK_DEFAULT_CONFIG(SAMPLING_RATE);
+        //i2s_pdm_tx_clk_config_t clk_cfg = I2S_PDM_TX_CLK_DEFAULT_CONFIG(SAMPLING_RATE);
         i2s_pdm_tx_clk_config_t clk_cfg = I2S_PDM_TX_CLK_DAC_DEFAULT_CONFIG(SAMPLING_RATE);
-        clk_cfg.up_sample_fs = SAMPLING_RATE / 100;
+        clk_cfg.up_sample_fs = 480; //SAMPLING_RATE / 100;
+        //i2s_pdm_tx_slot_config_t slot_cfg = I2S_PDM_TX_SLOT_RAW_FMT_DAC_DEFAULT_CONFIG((i2s_data_bit_width_t)16, I2S_SLOT_MODE_MONO);
         i2s_pdm_tx_slot_config_t slot_cfg = I2S_PDM_TX_SLOT_PCM_FMT_DEFAULT_CONFIG((i2s_data_bit_width_t)16, I2S_SLOT_MODE_MONO);
         i2s_pdm_tx_config_t tx_cfg = {
             .gpio_cfg = {
@@ -1029,7 +1025,7 @@ void app_main()
         ret = i2s_channel_init_pdm_tx_mode(tx_handle, &tx_cfg);
         if (ret != ESP_OK)
         {
-            ESP_LOGE("PDM_TX_EXAMPLE", "Failed to initialize I2S PDM TX mode: %s", esp_err_to_name(ret));
+            ESP_LOGE("PDM_TX", "Failed to initialize I2S PDM TX mode: %s", esp_err_to_name(ret));
             return;
         }
 
@@ -1045,7 +1041,7 @@ void app_main()
         ret = i2s_channel_enable(tx_handle);
         if (ret != ESP_OK)
         {
-            ESP_LOGE("PDM_TX_EXAMPLE", "Failed to enable I2S PDM TX channel: %s", esp_err_to_name(ret));
+            ESP_LOGE("PDM_TX", "Failed to enable I2S PDM TX channel: %s", esp_err_to_name(ret));
             return;
         }
         i2s_pdm_running = true;
