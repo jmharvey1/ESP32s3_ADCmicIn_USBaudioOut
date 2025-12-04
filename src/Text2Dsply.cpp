@@ -442,6 +442,7 @@ void Bld_Scope_scrn(void)
     }
 
     lv_scr_load(ui_Scope);
+    ScopeActive = true;
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -550,7 +551,7 @@ void DisplayTask(void *param)
     //lv_screen_load_anim(scr_1, LV_SCR_LOAD_ANIM_NONE, 0, 0, false);
     //lv_scr_load(scr_1);
     Bld_Scope_scrn();
-    ScopeActive = true;
+    // ScopeActive = true;
     printf("Text2Dsply: TEXT Screen STEP 4 COMPLETE\n");
    
     /*now because we are going to manage screen refreshing explicitly within this project, delete lvgl's internal refresh process*/

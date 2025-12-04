@@ -31,13 +31,14 @@ extern bool DSP_ON;
 extern bool TWO_STAGE;
 extern bool ESP_SR;
 /* Create Text Area GUI
-princapaly to show debug text inplace of passing them to a remote serial terminal via USB */
+principaly to show debug text inplace of passing them to a remote serial terminal via USB */
 void Txt_GUI_init(void);
 /* 
 Display debug text on contianed in 'NuTxt' on WaveShare Display using LVGL graphics library
  */
 void Print2Dsply(char NuTxt[]);
 
+void Bld_Scope_scrn(void);
 
 #ifdef __cplusplus
 } /*extern "C"*/

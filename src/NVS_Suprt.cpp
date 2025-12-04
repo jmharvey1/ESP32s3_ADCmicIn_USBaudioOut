@@ -1,4 +1,4 @@
-/*20251109 created to support saving user setting(s) to NonVolitle Storage (NVS)*/
+/*20251109 created to support saving user setting(s) to non-volatile storage (NVS)*/
 #include <stdio.h>
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"

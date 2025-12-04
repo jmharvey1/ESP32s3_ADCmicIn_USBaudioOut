@@ -14,4 +14,7 @@ Currently there are 4 DSP modes (which are switchable 'on the fly'):
 The project's original intent is to showcase/examine how these DSP filtering techniques can be used in a ham radio environment.  
 Primarilly to recover noisy CW signals, and in the case of the NSNET2 filter, SSB vioce audio.  
 While the ESPIDF offers a wide range of libraries like these, their use is often not well documented.  
-So for those interested in exploring these methods, (plus some LVGL features), this may be of value.    
+So for those interested in exploring these methods, (plus some LVGL features), this may be of value.  
+
+This repository contains files used to build the Noise filters shown in the YouTube Video at:
+https://youtu.be/3VCzj04y6MI

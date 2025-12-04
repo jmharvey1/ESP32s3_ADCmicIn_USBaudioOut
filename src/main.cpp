@@ -940,7 +940,10 @@ void app_main()
             //nvs_suprt.get_StdAFCfg(strdAT);//nvs_suprt.nvs_read_val("StdAFCfg", strdAT);
             }
     }
+    
     Txt_GUI_init();
+    
+    ///Bld_Scope_scrn();
     vTaskDelay(pdMS_TO_TICKS(50));
     // Initialize ESP Voice Noise Reduction AFE (nsnet2 noise suppression model)
     voiceNR.esp_sr_init();
