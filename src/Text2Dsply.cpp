@@ -250,7 +250,7 @@ static void btn3_event_handler(lv_event_t * e)
         }
         else{
             lv_label_set_text(Btn3_label, "Plot ON");
-            printf("gain output SignalMag Sqlcthresh Nf \n");
+            printf("gain Goertzel_lvl SignalMag Sqlcthresh Nf \n");
         }
     }
     else if(code == LV_EVENT_VALUE_CHANGED) {

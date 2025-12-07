@@ -8,7 +8,7 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 4th, run the following command:
     python3.13 ./components/esp-sr/model/movemodel.py -d1 ./sdkconfig.esp32-s3-devkitc-1 -d2 ./components/esp-sr -d3 .pio/build/esp32-s3-devkitc-1
     (this creates the 'srmodels.bin' file in the build directory)
-5ft, run the following command:
+5th, run the following command:
     close the terminal, & then simply reopen the terminal, before running the following command:
     esptool.py -p /dev/ttyACM0 -b 460800 --before default-reset --after hard-reset --chip esp32s3 write_flash --flash-mode dio --flash-size detect --flash-freq 40m 0x250000 .pio/build/esp32-s3-devkitc-1/srmodels/srmodels.bin
     (this flashes the 'srmodels.bin' file to the esp32s3)
@@ -101,6 +101,7 @@ float AvgTone = 750.0f;
 float MaxMag = 0.0f;
 float Sqlcthresh = 100.0f;
 float SignalMag = 0.0f;
+float Goertzel_lvl = 0.0f;
 static const char *TAG = "JMH Test";
 
 // Buffers
@@ -381,14 +382,15 @@ void wiener_filter_process(float* input, float* output)
             else{
                 keydwn = 1.0f;
             }
+             Goertzel_lvl = (0.3*Goertzel_lvl) + (0.7*output[i]);
             //Blue (gain), Red (output), Green (S), Orange (Sqlcthresh), Purple (Nf)
-            if (PlotMode == 1) printf("%0.0f %0.0f %0.0f %0.0f %0.0f\n", 110 * keydwn * gain, output[i], SignalMag, Sqlcthresh, Nf);
+            if (PlotMode == 1) printf("%0.0f %0.0f %0.0f %0.0f %0.0f\n", 110 * keydwn * gain, Goertzel_lvl, SignalMag, Sqlcthresh, Nf);
         }
         if(i2s_pdm_running) {
-            curMag = 8*fabsf(output[i]);
+            curMag = 8*fabsf(Goertzel_lvl);
         }
         else{
-            curMag = fabsf(output[i]);
+            curMag = fabsf(Goertzel_lvl);
         }
         curMag *= gain * keydwn;
         if(curMag > 2000.0f) curMag = 2000.0f;    
