@@ -33,6 +33,7 @@ lv_obj_t *win2;
 lv_obj_t *scr_1;
 lv_obj_t * Btn1_label;
 lv_obj_t * Btn2_label;
+lv_obj_t * Btn3_label;
 /*Scope/chart variables*/
 static lv_obj_t *ui_Scope;
 static lv_obj_t *ui_Chart1;
@@ -228,6 +229,34 @@ static void btn2_event_handler(lv_event_t * e)
         LV_LOG_USER("Toggled");
     }
 }
+
+static void btn3_event_handler(lv_event_t * e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    //printf("btn3_event_handler code=%d\n", code);
+
+    if(code == LV_EVENT_CLICKED) {
+        /*Following 4 lines act as a button 'de-bounce' circuit*/
+        unsigned long EvntStart = pdTICKS_TO_MS(xTaskGetTickCount());
+        uint16_t interval = (uint16_t)(EvntStart - LastStart1);
+        LastStart1 = EvntStart;
+        if(interval< 1000) return;
+        PlotMode++;
+        if(PlotMode > 1) PlotMode = 0;
+        //nvs_suprt2.nvs_write_val("AudioOutMode", AudioOutMode);
+        if(PlotMode == 0){ 
+
+            lv_label_set_text(Btn3_label, "Plot OFF");
+        }
+        else{
+            lv_label_set_text(Btn3_label, "Plot ON");
+            printf("gain output SignalMag Sqlcthresh Nf \n");
+        }
+    }
+    else if(code == LV_EVENT_VALUE_CHANGED) {
+        LV_LOG_USER("Toggled");
+    }
+}
 /*internal method to pass individal text characters to 'LVGL's Text Area' Buffer */
 void Update_textarea(lv_obj_t *TxtArea, char bufChar)
 {
@@ -347,8 +376,8 @@ void Bld_Scope_scrn(void)
         ui_Scope = lv_obj_create(NULL);
         win2 = lv_win_create(ui_Scope);
         lv_obj_add_style(win2, &style_win1, 0);
-        //lv_obj_set_style_bg_color(win2, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN);
-        //lv_obj_set_style_bg_opa(win2, 100, LV_PART_MAIN | LV_STATE_DEFAULT);
+        // lv_obj_set_style_bg_color(win2, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN);
+        // lv_obj_set_style_bg_opa(win2, 100, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_clear_flag(ui_Scope, LV_OBJ_FLAG_SCROLLABLE); /// Flags
 
         ui_Chart1 = lv_chart_create(ui_Scope);
@@ -396,7 +425,7 @@ void Bld_Scope_scrn(void)
         ui_Label1 = lv_label_create(ui_Scope);
         lv_obj_set_width(ui_Label1, LV_SIZE_CONTENT);  /// 1
         lv_obj_set_height(ui_Label1, LV_SIZE_CONTENT); /// 1
-        lv_obj_set_x(ui_Label1, -100);
+        lv_obj_set_x(ui_Label1, 25);
         lv_obj_set_y(ui_Label1, -202);
         lv_obj_set_align(ui_Label1, LV_ALIGN_CENTER);
         lv_label_set_text(ui_Label1, "Peak Mag:");
@@ -407,7 +436,7 @@ void Bld_Scope_scrn(void)
         ui_Label2 = lv_label_create(ui_Scope);
         lv_obj_set_width(ui_Label2, LV_SIZE_CONTENT);  /// 1
         lv_obj_set_height(ui_Label2, LV_SIZE_CONTENT); /// 1
-        lv_obj_set_x(ui_Label2, 195);
+        lv_obj_set_x(ui_Label2, 250);
         lv_obj_set_y(ui_Label2, -203);
         lv_obj_set_align(ui_Label2, LV_ALIGN_CENTER);
         lv_label_set_text(ui_Label2, "Frequency:");
@@ -426,19 +455,31 @@ void Bld_Scope_scrn(void)
 
         lv_obj_t *btn2 = lv_win_add_button(win2, LV_SYMBOL_DUMMY, 100);
         lv_obj_add_event_cb(btn2, btn2_event_handler, LV_EVENT_ALL, NULL);
-        lv_obj_align(btn2, LV_ALIGN_CENTER, 150, -40);
+        //lv_obj_align(btn2, LV_ALIGN_CENTER, 150, -40);
+        lv_obj_align(btn2, LV_ALIGN_CENTER, 0, -40);
         lv_obj_remove_flag(btn2, LV_OBJ_FLAG_PRESS_LOCK);
 
         Btn2_label = lv_label_create(btn2);
-        if(AudioOutMode == 0){ //AudioOutMode; //0=I2S PDM, 1=USB Audio
+        if (AudioOutMode == 0)
+        { // AudioOutMode; //0=I2S PDM, 1=USB Audio
 
             lv_label_set_text(Btn2_label, "I2S/PDM");
         }
-        else{
+        else
+        {
             lv_label_set_text(Btn2_label, "USB/UAC");
         }
-        //lv_label_set_text(Btn2_label, "IIR OFF");
+        // lv_label_set_text(Btn2_label, "IIR OFF");
         lv_obj_center(Btn2_label);
+
+        lv_obj_t *btn3 = lv_win_add_button(win2, LV_SYMBOL_DUMMY, 100);
+        lv_obj_add_event_cb(btn3, btn3_event_handler, LV_EVENT_ALL, NULL);
+        lv_obj_align(btn3, LV_ALIGN_CENTER, 0, -40);
+        lv_obj_remove_flag(btn3, LV_OBJ_FLAG_PRESS_LOCK);
+
+        Btn3_label = lv_label_create(btn3);
+        lv_label_set_text(Btn3_label, "Plot OFF");
+        lv_obj_center(Btn3_label);
     }
 
     lv_scr_load(ui_Scope);
@@ -544,6 +585,7 @@ void DisplayTask(void *param)
     Btn2_label = lv_label_create(btn2);
     lv_label_set_text(Btn2_label, "IIR OFF");
     lv_obj_center(Btn2_label);
+   
     /* the following are possible options but currently arent needed */
     //lv_obj_add_event_cb(DBtextArea, Screen_event_handler, LV_EVENT_CLICKED, NULL);
     //lv_obj_add_event_cb(DBtextArea, textarea_event_handler, LV_EVENT_CLICKED, DBtextArea);

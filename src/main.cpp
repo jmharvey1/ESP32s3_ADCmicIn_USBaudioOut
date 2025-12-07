@@ -37,6 +37,7 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 *        Note: to complete the swap, a 'reset', or 'power off/power on' operation has to follow the button selection
 */
 /* 20251115 Text2Dsply.cpp - Changed Button1 event detectioin to 'LV_EVENT_SHORT_CLICKED' to reduce false detections*/
+/* 20251107 Modified Wiener filter logic to better capture threshold setting */
 #include <stdio.h>
 #include <inttypes.h>
 #include <cmath>
@@ -99,6 +100,7 @@ float AvgMag = 0.0f;
 float AvgTone = 750.0f;
 float MaxMag = 0.0f;
 float Sqlcthresh = 100.0f;
+float SignalMag = 0.0f;
 static const char *TAG = "JMH Test";
 
 // Buffers
@@ -164,7 +166,8 @@ const uint8_t *p2 = &audio_Rbuffer[0];
 void *audio_RbufferPtr = (void *)p2;
 int byteStep = sizeof(int16_t);
 int i2s_sample_size = sizeof(i2s_samples);
-int AudioOutMode = 0; //0=I2S PDM, 1=USB Audio  
+int AudioOutMode = 0; //0=I2S PDM, 1=USB Audio 
+int PlotMode = 0; //0=Plot Off, 1=Plot On 
 
 VoiceNR voiceNR(&audio_Rbuffer[0], AucRB_len); // Create an instance of the VoiceNR class
 NVS_Suprt nvs_suprt; // Create an instance of the NVS_Suprt class
@@ -221,22 +224,25 @@ void i2s_write_task(void *arg) {
 void estimate_noise(float *mag, int len) {
     // Assume first N frames are noise only, or use VAD
     float avgNoiseMag = 0.0f;
-    for (int i = 0; i < len; i++) {
+    //for (int i = 0; i < len; i++) {
+    for (int i = 44; i <= 56; i++) {
         if(i == PkFreqBin) { // || i == 464
-           //noise_psd[i] = (noise_psd[i+10] + noise_psd[i-10])/2; //avoid notch frequencies
-            noise_psd[i] = (noise_psd[i+3] + noise_psd[i-3])/2; //avoid notch frequencies
+           //noise_psd[i] = (noise_psd[i+3] + noise_psd[i-3])/2; //avoid notch frequencies
+           avgNoiseMag += (mag[i+3] + mag[i-3])/2; //avoid notch frequencies
         }
         else{
-            //noise_psd[i] = alphaW * noise_psd[i] + (1.0f - alphaW) * mag[i] * mag[i];
-            noise_psd[i] =  mag[i]; // Temporary: use current magnitude as noise PSD
+            //noise_psd[i] =  mag[i]; // Temporary: use current magnitude as noise PSD
+            avgNoiseMag += noise_psd[i];
         }
-        if (i >= 44 && i <= 56) //only look/test for frequencies between 450 & 950 Hz
-        {
-             avgNoiseMag += noise_psd[i];
-        }
+        //if (i >= 44 && i <= 56) //only look/test for frequencies between 450 & 950 Hz
+        //{
+        //     avgNoiseMag += noise_psd[i];
+        //}
     }
-    avgNoiseMag /= (56 - 44 + 1);
-    Sqlcthresh = avgNoiseMag * 4.0f; //set threshold for signal detection
+    //avgNoiseMag /= (56 - 44 + 1);
+    avgNoiseMag /= 13.0f;
+    //Sqlcthresh = avgNoiseMag * 4.0f; //set threshold for signal detection
+    Sqlcthresh =   (0.7*Sqlcthresh)+(0.3*(avgNoiseMag * 4.0f));
 }
 
 void estimate_signal(float *mag, int len) {
@@ -272,6 +278,7 @@ void wiener_filter_process(float* input, float* output)
     float mag[FFT_SIZE / 2];
     float CurMaxMag = 00.0f;
     int curPkFreqBin = 0;
+    int OldPkFreqBin = PkFreqBin;
     for (int i = 0; i < FFT_SIZE / 2; i++)
     {
         float real = input[2 * i];
@@ -322,20 +329,37 @@ void wiener_filter_process(float* input, float* output)
             }
         }
     }
-    float S = mag[PkFreqBin];
-    float Nf = (mag[PkFreqBin + 10] + mag[PkFreqBin - 10]) / 2; // avoid notch frequencies;
-    float gain = 1.0f;
-    if (S < Sqlcthresh || Nf > 17)
-    { //didn't find an obvious signal bin based on last estimate
-        int OldPkFreqBin = PkFreqBin;
-        estimate_signal(mag, FFT_SIZE / 2); // or estimate_noise if in noise-only segment
-        estimate_noise(mag, FFT_SIZE / 2);  // or use VAD to decide
-        float S = signal_psd[PkFreqBin];
-        float Nf = noise_psd[PkFreqBin];
-        if (S < Sqlcthresh || Nf > 17){//still didn't find a good signal bin
-            gain = 0.0f; // suppress very low signal bins
-            PkFreqBin = OldPkFreqBin; //No useful signal found, retain old freq bin
+    SignalMag = 0.4*SignalMag + 0.6*mag[PkFreqBin];
+    //float Nf = (mag[PkFreqBin + 10] + mag[PkFreqBin - 10]) / 2; // avoid notch frequencies;
+    float avgNoiseMag = 0.0f;
+    for (int i = 28; i <= 61; i++) {  //only consider noise bins between 437 & 953 Hz
+        if(i == PkFreqBin) { 
+            avgNoiseMag += (mag[i+3] + mag[i-3])/2; //avoid peak frequency
         }
+        else{
+            avgNoiseMag += mag[i];
+        }
+    }
+    avgNoiseMag /= 34.0f;
+    Sqlcthresh =   (0.7*Sqlcthresh)+(0.3*(avgNoiseMag * 4.0f));
+    float Nf = 2.5f * Sqlcthresh; //set noise floor estimate 
+    float gain = 1.0f;
+    // if (S < Sqlcthresh || Nf > 17)
+    // { //didn't find an obvious signal bin based on last estimate
+    //     int OldPkFreqBin = PkFreqBin;
+    //     estimate_signal(mag, FFT_SIZE / 2); // or estimate_noise if in noise-only segment
+    //     estimate_noise(mag, FFT_SIZE / 2);  // or use VAD to decide
+    //     float S = signal_psd[PkFreqBin];
+    //     float Nf = noise_psd[PkFreqBin];
+    //     if (S < Sqlcthresh || Nf > 17){//still didn't find a good signal bin
+    //         gain = 0.0f; // suppress very low signal bins
+    //         PkFreqBin = OldPkFreqBin; //No useful signal found, retain old freq bin
+    //     }
+    // }
+    if (SignalMag < Sqlcthresh)
+    { //didn't find an obvious signal bin
+        gain = 0.0f; // suppress very low signal bins
+        PkFreqBin = OldPkFreqBin; //No useful signal found, retain last known good freq bin
     }
     
     // Pseudo Inverse FFT
@@ -343,15 +367,22 @@ void wiener_filter_process(float* input, float* output)
     float fr = 2 * M_PI * ((AvgTone) / SAMPLING_RATE);
     //int cntr = 0; //for debugging
     float curMag = 0.0f;
+    float keydwn = 1.0f;
     for (int i = 0; i < FFT_SIZE; i++)
     {
         /*Uncomment the following for debugging */
         if (i % 64 == 0)
         {
             cntr++;
-            //Blue (gain), Red (output), Green (S), Orange (Nf)
-            //printf("%0.0f %0.0f %0.0f %0.0f %d\n", 110 * gain, output[i], S, Nf, PkFreqBin);
-            //printf("%d\n", PkFreqBin);
+            if(output[i]< Nf)
+            {
+                keydwn = 0.0f;
+            }
+            else{
+                keydwn = 1.0f;
+            }
+            //Blue (gain), Red (output), Green (S), Orange (Sqlcthresh), Purple (Nf)
+            if (PlotMode == 1) printf("%0.0f %0.0f %0.0f %0.0f %0.0f\n", 110 * keydwn * gain, output[i], SignalMag, Sqlcthresh, Nf);
         }
         if(i2s_pdm_running) {
             curMag = 8*fabsf(output[i]);
@@ -359,8 +390,9 @@ void wiener_filter_process(float* input, float* output)
         else{
             curMag = fabsf(output[i]);
         }
+        curMag *= gain * keydwn;
         if(curMag > 2000.0f) curMag = 2000.0f;    
-        if(gain == 0.0f || curMag<50 ) curMag = 0.0f;
+        //if(gain == 0.0f || curMag<50 ) curMag = 0.0f;
         AvgMag = curMag * 0.1f + AvgMag * 0.9f; //smooth output
         // if(i % 32 == 0){
         //     printf("%0.0f\n", AvgMag);
@@ -379,7 +411,6 @@ void wiener_filter_process(float* input, float* output)
         }
     }
 }
-
 // Utility: Low-pass filter
 static float applyLowPassFilter(float sample)
 {

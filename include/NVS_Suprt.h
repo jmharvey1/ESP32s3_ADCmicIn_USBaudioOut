@@ -20,6 +20,7 @@ typedef enum {
 } nvs_result_t;
 
 extern int AudioOutMode; //0=I2S PDM, 1=USB Audio
+extern int PlotMode; //0=Plot Off, 1=Plot On
 class NVS_Suprt {
 public:
     NVS_Suprt() = default;
