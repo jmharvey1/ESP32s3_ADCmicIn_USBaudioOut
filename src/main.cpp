@@ -38,6 +38,7 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 */
 /* 20251115 Text2Dsply.cpp - Changed Button1 event detectioin to 'LV_EVENT_SHORT_CLICKED' to reduce false detections*/
 /* 20251107 Modified Wiener filter logic to better capture threshold setting */
+/* 20251107 More minor tweaks to Wiener filter logic */
 #include <stdio.h>
 #include <inttypes.h>
 #include <cmath>
@@ -375,16 +376,48 @@ void wiener_filter_process(float* input, float* output)
         if (i % 64 == 0)
         {
             cntr++;
-            if(output[i]< Nf)
+            Goertzel_lvl = (0.3*Goertzel_lvl) + (0.7*output[i]);
+            //Goertzel_lvl = (1.0*output[i]);
+            //if(output[i]< Nf)
+            if(Goertzel_lvl< Nf)
             {
-                keydwn = 0.0f;
+                if (i >= 64 && i < (ADC_SAMPLE_CNT- 64))
+                {
+                    if (output[i - 64] >= Nf && output[i + 64] >= Nf)
+                    { //check neighbors, if they are also High, then consider this is noise & maintain key down state
+                        keydwn = 1.0f;
+                    }
+                    else
+                    {
+                        keydwn = 0.0f;
+                    }
+                }
+                else
+                {
+                    keydwn = 0.0f;
+                }
             }
             else{
-                keydwn = 1.0f;
+
+                if (i >= 64 && i < (ADC_SAMPLE_CNT- 64))
+                {
+                    if (output[i - 64] < Nf && output[i + 64] < Nf)
+                    { //check neighbors, if they are also low, then consider this is noise & maintain key up state
+                        keydwn = 0.0f;
+                    }
+                    else
+                    {
+                        keydwn = 1.0f;
+                    }
+                }
+                else
+                {
+                    keydwn = 1.0f;
+                }
             }
-             Goertzel_lvl = (0.3*Goertzel_lvl) + (0.7*output[i]);
+            Goertzel_lvl = (0.3*Goertzel_lvl) + (0.7*output[i]);
             //Blue (gain), Red (output), Green (S), Orange (Sqlcthresh), Purple (Nf)
-            if (PlotMode == 1) printf("%0.0f %0.0f %0.0f %0.0f %0.0f\n", 110 * keydwn * gain, Goertzel_lvl, SignalMag, Sqlcthresh, Nf);
+            if (PlotMode == 1) printf("%0.0f %0.0f %0.0f %0.0f %0.0f\n", (110 * keydwn * gain), Goertzel_lvl, SignalMag, Sqlcthresh, Nf);
         }
         if(i2s_pdm_running) {
             curMag = 8*fabsf(Goertzel_lvl);
