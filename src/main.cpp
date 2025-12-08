@@ -38,7 +38,7 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 */
 /* 20251115 Text2Dsply.cpp - Changed Button1 event detectioin to 'LV_EVENT_SHORT_CLICKED' to reduce false detections*/
 /* 20251107 Modified Wiener filter logic to better capture threshold setting */
-/* 20251107 More minor tweaks to Wiener filter logic */
+/* 20251108 More minor tweaks to Wiener filter noise detection logic */
 #include <stdio.h>
 #include <inttypes.h>
 #include <cmath>
