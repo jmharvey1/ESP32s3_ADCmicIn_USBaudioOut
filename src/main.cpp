@@ -3,14 +3,27 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 1st, review 'README.rst' file in the 'components/esp-sr' directory
 2nd, from 'Platformio' run 'New Terminal' command
 3rd, from the new terminal window, run the following command:
-    . /home/jim/.platformio/packages/framework-espidf/export.sh
+   Linux:
+        . /home/jim/.platformio/packages/framework-espidf/export.sh
+    Windows:
+        C:\Users\james\.platformio\packages\framework-espidf\export.bat
+        note - may need to run 1st:
+        C:\Users\james\.platformio\packages\framework-espidf\install.bat
+
     (creates needed env. vars. for python)
 4th, run the following command:
-    python3.13 ./components/esp-sr/model/movemodel.py -d1 ./sdkconfig.esp32-s3-devkitc-1 -d2 ./components/esp-sr -d3 .pio/build/esp32-s3-devkitc-1
+    Linux:
+        python3.13 ./components/esp-sr/model/movemodel.py -d1 ./sdkconfig.esp32-s3-devkitc-1 -d2 ./components/esp-sr -d3 .pio/build/esp32-s3-devkitc-1
+    Windows:
+        python ./components/esp-sr/model/movemodel.py -d1 ./sdkconfig.esp32-s3-devkitc-1 -d2 ./components/esp-sr -d3 .pio/build/esp32-s3-devkitc-1
     (this creates the 'srmodels.bin' file in the build directory)
 5th, run the following command:
     close the terminal, & then simply reopen the terminal, before running the following command:
-    esptool.py -p /dev/ttyACM0 -b 460800 --before default-reset --after hard-reset --chip esp32s3 write_flash --flash-mode dio --flash-size detect --flash-freq 40m 0x250000 .pio/build/esp32-s3-devkitc-1/srmodels/srmodels.bin
+    Linux:
+        esptool.py -p /dev/ttyACM0 -b 460800 --before default-reset --after hard-reset --chip esp32s3 write_flash --flash-mode dio --flash-size detect --flash-freq 40m 0x250000 .pio/build/esp32-s3-devkitc-1/srmodels/srmodels.bin
+    Windows:
+        may need to 1st run: pip install esptool
+        then run: esptool -p COM16 -b 460800 --before default-reset --after hard-reset --chip esp32s3 write_flash --flash-mode dio --flash-size detect --flash-freq 40m 0x250000 .pio/build/esp32-s3-devkitc-1/srmodels/srmodels.bin
     (this flashes the 'srmodels.bin' file to the esp32s3)
     */
 // Best practices applied:
@@ -39,6 +52,7 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 /* 20251115 Text2Dsply.cpp - Changed Button1 event detectioin to 'LV_EVENT_SHORT_CLICKED' to reduce false detections*/
 /* 20251107 Modified Wiener filter logic to better capture threshold setting */
 /* 20251108 More minor tweaks to Wiener filter noise detection logic */
+/* 20251109 Updated NSNET2 build/install notes to include Windows OS */
 #include <stdio.h>
 #include <inttypes.h>
 #include <cmath>
