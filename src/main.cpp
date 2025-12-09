@@ -43,7 +43,7 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 #include <inttypes.h>
 #include <cmath>
 #include <cstring>
-
+#include <esp_idf_version.h> // Include this header for the function
 #include "../../managed_components/espressif__esp-dsp/modules/fft/include/dsps_fft2r.h"
 #include "dsps_math.h"
 #include "esp_dsp.h"
@@ -976,7 +976,7 @@ static void uac_device_set_volume_cb(uint32_t volume, void *arg)
 void app_main()
 {
     //vTaskDelay(pdMS_TO_TICKS(4000));
-    printf("app_main: running\n");
+    printf("\napp_main: running IDF version: %s\n", esp_get_idf_version());
     char TxtBuf[60];
 
     /* test/check NVS to see if user setting/param have been stored */
