@@ -24,4 +24,4 @@
 #define ESP_PANEL_TOUCH_MAX_POINTS          (5)
 
 /* Maximum button number */
-#define ESP_PANEL_TOUCH_MAX_BUTTONS         (1)
+#define ESP_PANEL_TOUCH_MAX_BUTTONS         (0)  //JMH changed from 1 to 0 20251215

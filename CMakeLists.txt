@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.16.0)
+message("Configuring Project ESP32S3_CW_Machine")
+message("Using IDF_PATH: $ENV{IDF_PATH}")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(ESP32s3_ADC_Mic)
 #set(EXTRA_COMPONENT_DIRS ${EXTRA_COMPONENT_DIRS} /home/jim/Documents/PlatformIO/Projects/ESP32s3_ADCmicIn_USBaudioOut/esp-iot-solution/components)

@@ -63,7 +63,7 @@ bool DSP_ON = false;
 bool TWO_STAGE = false;
 bool ESP_SR = false;
 unsigned long LastStart1 = 0;
-int NoiseSupprLvl = 0;
+int FilterMode = 0;
 
 NVS_Suprt nvs_suprt2; // Create an instance of the NVS_Suprt class
 
@@ -163,17 +163,23 @@ static void textarea_event_handler(lv_event_t *e)
 static void btn1_event_handler(lv_event_t * e)
 {
     lv_event_code_t code = lv_event_get_code(e);
-
-    if(code == LV_EVENT_SHORT_CLICKED) { //LV_EVENT_CLICKED) {
+    //printf(" BTN1 event code %d\n", (int)code);
+    if(code == LV_EVENT_CLICKED) { //LV_EVENT_SHORT_CLICKED LV_EVENT_PRESSING LV_EVENT_CLICKED) {
         /*Following 4 lines act as a button 'de-bounce' circuit*/
         unsigned long EvntStart = pdTICKS_TO_MS(xTaskGetTickCount());
         uint16_t interval = (uint16_t)(EvntStart - LastStart1);
-        // if(interval < 500) return;
+        if(interval < 500)
+        {
+            LastStart1 = pdTICKS_TO_MS(xTaskGetTickCount());
+            // printf("click event skipped\n");
+            return;
+        }
         LastStart1 = EvntStart;
-        if(interval< 1000) return;
-        NoiseSupprLvl++;
-        if(NoiseSupprLvl > 3) NoiseSupprLvl = 0;
-        switch (NoiseSupprLvl){
+        // if(interval< 1000) return;
+        FilterMode++;
+        if(FilterMode > 3) FilterMode = 0;
+        // printf(" BTN1 event code %d; FilterMode %d , interval %d\n", (int)code, FilterMode, (int)interval);
+        switch (FilterMode){
             case 0:
                 DSP_ON = false;
                 TWO_STAGE = false;
@@ -196,10 +202,11 @@ static void btn1_event_handler(lv_event_t * e)
                 lv_label_set_text(Btn1_label, "NSNET2");
                 break;  
         }
-        //
-        //DSP_ON = !DSP_ON;
-        //if(DSP_ON) lv_label_set_text(Btn1_label, "NR OFF");
-        //else lv_label_set_text(Btn1_label, "NR ON");
+        lvgl_port_lock(-1);
+        lv_display_refr_timer(NULL);
+        lvgl_port_unlock_WShr();
+        //cwvTaskDelay( 3000 / portTICK_PERIOD_MS);
+        LastStart1 = pdTICKS_TO_MS(xTaskGetTickCount());
     }
     else if(code == LV_EVENT_VALUE_CHANGED) {
         LV_LOG_USER("Toggled");
@@ -208,13 +215,14 @@ static void btn1_event_handler(lv_event_t * e)
 static void btn2_event_handler(lv_event_t * e)
 {
     lv_event_code_t code = lv_event_get_code(e);
-
+    //printf(" BTN2 event code %d\n", (int)code);
     if(code == LV_EVENT_CLICKED) {
         /*Following 4 lines act as a button 'de-bounce' circuit*/
         unsigned long EvntStart = pdTICKS_TO_MS(xTaskGetTickCount());
         uint16_t interval = (uint16_t)(EvntStart - LastStart1);
         LastStart1 = EvntStart;
         if(interval< 1000) return;
+        printf(" BTN2 event code %d\n", (int)code);
         AudioOutMode++;
         if(AudioOutMode > 1) AudioOutMode = 0;
         nvs_suprt2.nvs_write_val("AudioOutMode", AudioOutMode);
@@ -234,14 +242,15 @@ static void btn2_event_handler(lv_event_t * e)
 static void btn3_event_handler(lv_event_t * e)
 {
     lv_event_code_t code = lv_event_get_code(e);
-    //printf("btn3_event_handler code=%d\n", code);
+    //printf(" BTN3 event code %d\n", (int)code);
 
     if(code == LV_EVENT_CLICKED) {
         /*Following 4 lines act as a button 'de-bounce' circuit*/
         unsigned long EvntStart = pdTICKS_TO_MS(xTaskGetTickCount());
         uint16_t interval = (uint16_t)(EvntStart - LastStart1);
         LastStart1 = EvntStart;
-        if(interval< 1000) return;
+        if(interval< 500) return;
+        printf(" BTN3 event code %d\n", (int)code);
         PlotMode++;
         if(PlotMode > 1) PlotMode = 0;
         //nvs_suprt2.nvs_write_val("AudioOutMode", AudioOutMode);
@@ -253,6 +262,10 @@ static void btn3_event_handler(lv_event_t * e)
             lv_label_set_text(Btn3_label, "Plot ON");
             printf("gain Goertzel_lvl SignalMag Sqlcthresh Nf \n");
         }
+        lvgl_port_lock(-1);
+        lv_display_refr_timer(NULL);
+        lvgl_port_unlock_WShr();
+        vTaskDelay( 1000 / portTICK_PERIOD_MS);
     }
     else if(code == LV_EVENT_VALUE_CHANGED) {
         LV_LOG_USER("Toggled");
@@ -488,7 +501,7 @@ void Bld_Scope_scrn(void)
         lv_obj_set_x(ui_Label3, -150);
         lv_obj_set_y(ui_Label3, +225);
         lv_obj_set_align(ui_Label3, LV_ALIGN_CENTER);
-        lv_label_set_text(ui_Label3, "ESP32s3 CW/SSB Noise Filter     Date: Dec 08, 2025");
+        lv_label_set_text(ui_Label3, "ESP32s3 CW/SSB Noise Filter     Date: Dec 16, 2025");
     }
 
     lv_scr_load(ui_Scope);
@@ -627,7 +640,7 @@ void DisplayTask(void *param)
     {
         bool lpagn = true;
         //bool UpDtScrn = false;
-        while (lpagn)
+        while (lpagn && !ScopeActive)
         {
             char NuQchr;
             int i = 0;

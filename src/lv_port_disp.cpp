@@ -44,7 +44,7 @@
 #define I2C_MASTER_SCL_IO    GPIO_NUM_9  //GPIO_NUM_15  // Replace with your SCL pin
 #define I2C_MASTER_SDA_IO    GPIO_NUM_8   //GPIO_NUM_16  // Replace with your SDA pin
 #define I2C_MASTER_NUM       I2C_NUM_0    // I2C port 0
-#define I2C_MASTER_FREQ_HZ   100000       // 400kHz
+#define I2C_MASTER_FREQ_HZ   400000       // 400kHz
 #define GT911_I2C_ADDR       0x5D         // Default I2C address, might be 0x14
 esp_lcd_touch_handle_t out_touch = NULL;
 
@@ -434,7 +434,7 @@ static void touchpad_read_cb(lv_indev_t * indev_drv, lv_indev_data_t * data)
     //if(touchpad_pressed) printf("touchpad_read_cb: touchpad_cnt: %d\n", touchpad_cnt);
     if(touchpad_pressed && touchpad_cnt > 0)
     {
-        // printf("touchpad_read_cb\n");    
+        //printf("touchpad_read_cb\n");    
         //touchpad_get_xy(&last_x, &last_y);
         last_x = touchpad_x[0];
  		last_y = touchpad_y[0];

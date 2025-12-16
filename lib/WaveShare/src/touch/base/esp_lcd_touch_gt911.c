@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+/*20251216 Modified esp_lcd_touch_gt911_read_data() to stop false button click events */
 
 #include "ESP_PanelLog.h"
 
@@ -208,7 +209,8 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
     uint8_t touch_cnt = 0;
     uint8_t clear = 0;
     size_t i = 0;
-    //char LogBuf[60];
+    char LogBuf[60];
+    bool PrntLog = false;
     //sprintf(LogBuf,"esp_lcd_touch_gt911_read_data(%p) -   assert(tp != NULL)\n", *((void **)&tp));
     assert(tp != NULL);
     //sprintf(LogBuf,"esp_lcd_touch_gt911_read_data(%p) - START\n", *((void **)&tp));//JMH ADD
@@ -226,14 +228,13 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
         //  sprintf(LogBuf,"esp_lcd_touch_gt911_read_data(%p) - Step 2 Complete\n", *((void **)&tp));//JMH ADD
 #if (CONFIG_ESP_LCD_TOUCH_MAX_BUTTONS > 0)
     } else if ((buf[0] & 0x10) == 0x10) {
-        /* Read all keys */
-        uint8_t key_max = ((ESP_GT911_TOUCH_MAX_BUTTONS < CONFIG_ESP_LCD_TOUCH_MAX_BUTTONS) ? \
-                           (ESP_GT911_TOUCH_MAX_BUTTONS) : (CONFIG_ESP_LCD_TOUCH_MAX_BUTTONS));
+         /* Read all keys */
+        uint8_t key_max = ((ESP_GT911_TOUCH_MAX_BUTTONS < CONFIG_ESP_LCD_TOUCH_MAX_BUTTONS) ? (ESP_GT911_TOUCH_MAX_BUTTONS) : (CONFIG_ESP_LCD_TOUCH_MAX_BUTTONS));
         CalerID = 2; //JMH ADD                   
         err = touch_gt911_i2c_read(tp, ESP_LCD_TOUCH_GT911_READ_KEY_REG, &buf[0], key_max);
         ESP_RETURN_ON_ERROR(err, TAG, "I2C read error!");
 
-        /* Clear all */
+         /* Clear all */
         touch_gt911_i2c_write(tp, ESP_LCD_TOUCH_GT911_READ_XY_REG, clear);
         ESP_RETURN_ON_ERROR(err, TAG, "I2C write error!");
 
@@ -282,12 +283,15 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
             tp->data.coords[i].x = ((uint16_t)buf[(i * 8) + 3] << 8) + buf[(i * 8) + 2];
             tp->data.coords[i].y = (((uint16_t)buf[(i * 8) + 5] << 8) + buf[(i * 8) + 4]);
             tp->data.coords[i].strength = (((uint16_t)buf[(i * 8) + 7] << 8) + buf[(i * 8) + 6]);
+            if(tp->data.coords[i].strength>0){
+                PrntLog = true;
+                sprintf(LogBuf,"%d. strength = %d\n", i, (int)tp->data.coords[i].strength);
+            }
         }
 
         portEXIT_CRITICAL(&tp->data.lock);
     }
-    //  sprintf(LogBuf,"esp_lcd_touch_gt911_read_data(%p) - Complete\n", *((void **)&tp));//JMH ADD
-    //printf(LogBuf);
+    if(PrntLog) printf(LogBuf); //JMH 20251215 this entry stopped false button click events (why, don't know, but does)
     return ESP_OK;
 }
 
