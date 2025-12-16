@@ -81,6 +81,7 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 /* 20251108 More minor tweaks to Wiener filter noise detection logic */
 /* 20251109 Updated NSNET2 build/install notes to include Windows OS */
 /*20251216 Modified esp_lcd_touch_gt911.c to stop false button click events */
+/*20251216 More tweaks to Wiener filter logic */
 #include <stdio.h>
 #include <inttypes.h>
 #include <cmath>
@@ -145,6 +146,7 @@ float MaxMag = 0.0f;
 float Sqlcthresh = 100.0f;
 float SignalMag = 0.0f;
 float Goertzel_lvl = 0.0f;
+float keydwn = 0.0f;
 static const char *TAG = "JMH Test";
 
 // Buffers
@@ -388,18 +390,6 @@ void wiener_filter_process(float* input, float* output)
     Sqlcthresh =   (0.7*Sqlcthresh)+(0.3*(avgNoiseMag * 4.0f));
     float Nf = 2.5f * Sqlcthresh; //set noise floor estimate 
     float gain = 1.0f;
-    // if (S < Sqlcthresh || Nf > 17)
-    // { //didn't find an obvious signal bin based on last estimate
-    //     int OldPkFreqBin = PkFreqBin;
-    //     estimate_signal(mag, FFT_SIZE / 2); // or estimate_noise if in noise-only segment
-    //     estimate_noise(mag, FFT_SIZE / 2);  // or use VAD to decide
-    //     float S = signal_psd[PkFreqBin];
-    //     float Nf = noise_psd[PkFreqBin];
-    //     if (S < Sqlcthresh || Nf > 17){//still didn't find a good signal bin
-    //         gain = 0.0f; // suppress very low signal bins
-    //         PkFreqBin = OldPkFreqBin; //No useful signal found, retain old freq bin
-    //     }
-    // }
     if (SignalMag < Sqlcthresh)
     { //didn't find an obvious signal bin
         gain = 0.0f; // suppress very low signal bins
@@ -411,18 +401,15 @@ void wiener_filter_process(float* input, float* output)
     float fr = 2 * M_PI * ((AvgTone) / SAMPLING_RATE);
     //int cntr = 0; //for debugging
     float curMag = 0.0f;
-    float keydwn = 1.0f;
+    //float keydwn = 1.0f;
     for (int i = 0; i < FFT_SIZE; i++)
     {
-        /*Uncomment the following for debugging */
-        if (i % 64 == 0)
+        if (i % 64 == 0)// just hit a new 4ms interval/geortzel tone value/level
         {
             cntr++;
             Goertzel_lvl = (0.3*Goertzel_lvl) + (0.7*output[i]);
-            //Goertzel_lvl = (1.0*output[i]);
-            //if(output[i]< Nf)
             if(Goertzel_lvl< Nf)
-            {
+            { //if current geortzel level is below noise floor, test it for noise, before deciding it's a 'key up' state
                 if (i >= 64 && i < (ADC_SAMPLE_CNT- 64))
                 {
                     if (output[i - 64] >= Nf && output[i + 64] >= Nf)
@@ -434,7 +421,11 @@ void wiener_filter_process(float* input, float* output)
                         keydwn = 0.0f;
                     }
                 }
-                else
+                else if (i == 0 && keydwn == 1.0f && output[i + 64] >= Nf)
+                { //if we were in a key down state, and the next sample is high, maintain key down state
+                    keydwn = 1.0f;
+                }
+                else // were at the beginning or end of the buffer, so just assume it's noise & assign it key up state
                 {
                     keydwn = 0.0f;
                 }
@@ -452,13 +443,18 @@ void wiener_filter_process(float* input, float* output)
                         keydwn = 1.0f;
                     }
                 }
-                else
+                else if (i == 0 && keydwn == 0.0f && output[i + 64] < Nf)
+                { //if we were in a key down state, and the next sample is high, maintain key down state
+                    keydwn = 0.0f;
+                }
+                
+                else // were at the beginning or end of the buffer, so just assume it's a valid key down state
                 {
                     keydwn = 1.0f;
                 }
             }
             Goertzel_lvl = (0.3*Goertzel_lvl) + (0.7*output[i]);
-            //Blue (gain), Red (output), Green (S), Orange (Sqlcthresh), Purple (Nf)
+            //Blue (keydwn * gain), Red (output), Green (S), Orange (Sqlcthresh), Purple (Nf)
             if (PlotMode == 1) printf("%0.0f %0.0f %0.0f %0.0f %0.0f\n", (110 * keydwn * gain), Goertzel_lvl, SignalMag, Sqlcthresh, Nf);
         }
         if(i2s_pdm_running) {
