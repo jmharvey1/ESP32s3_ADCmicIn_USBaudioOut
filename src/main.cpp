@@ -82,6 +82,8 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 /* 20251109 Updated NSNET2 build/install notes to include Windows OS */
 /*20251216 Modified esp_lcd_touch_gt911.c to stop false button click events */
 /*20251216 More tweaks to Wiener filter logic */
+/*20251216 voice_nr.cpp, added lvgl_port_lock() call to VoiceNR::feed() method to stop crashing when switching to
+NSNET2 filter*/
 #include <stdio.h>
 #include <inttypes.h>
 #include <cmath>

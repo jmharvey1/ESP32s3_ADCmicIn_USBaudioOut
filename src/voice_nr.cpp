@@ -1,3 +1,5 @@
+/*20251216 added lvgl_port_lock() call to feed function to stop crashing when switching to
+NSNET2 filter*/
 /**
  * @file voice_nr.cpp
  * @brief Voice processing and USB audio ring-buffer management using FreeRTOS and esp-afe.
@@ -389,8 +391,12 @@ void VoiceNR::esp_sr_init(void)
 };
 void VoiceNR::feed(int16_t *feed_buff) 
 {
-    /*send this chunk to the sound processor*/
-    afe_handle->feed(afe_data, feed_buff);
+    if (lvgl_port_lock(-1)) {
+        /*send this chunk to the sound processor*/
+        afe_handle->feed(afe_data, feed_buff);
+        lvgl_port_unlock_WShr();
+    }
+    
 };
 esp_err_t VoiceNR::TaskStart(uint32_t stack_size_bytes, UBaseType_t priority)
 {
