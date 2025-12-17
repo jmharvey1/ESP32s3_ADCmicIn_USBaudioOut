@@ -84,6 +84,7 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 /*20251216 More tweaks to Wiener filter logic */
 /*20251216 voice_nr.cpp, added lvgl_port_lock() call to VoiceNR::feed() method to stop crashing when switching to
 NSNET2 filter*/
+/*20251217 More tweaks to Wiener filter logic */
 #include <stdio.h>
 #include <inttypes.h>
 #include <cmath>
@@ -149,6 +150,7 @@ float Sqlcthresh = 100.0f;
 float SignalMag = 0.0f;
 float Goertzel_lvl = 0.0f;
 float keydwn = 0.0f;
+float lastVal = 0;
 static const char *TAG = "JMH Test";
 
 // Buffers
@@ -403,7 +405,8 @@ void wiener_filter_process(float* input, float* output)
     float fr = 2 * M_PI * ((AvgTone) / SAMPLING_RATE);
     //int cntr = 0; //for debugging
     float curMag = 0.0f;
-    //float keydwn = 1.0f;
+    int exitCd = 0;
+    uint8_t exitFgs = 0;
     for (int i = 0; i < FFT_SIZE; i++)
     {
         if (i % 64 == 0)// just hit a new 4ms interval/geortzel tone value/level
@@ -411,53 +414,94 @@ void wiener_filter_process(float* input, float* output)
             cntr++;
             Goertzel_lvl = (0.3*Goertzel_lvl) + (0.7*output[i]);
             if(Goertzel_lvl< Nf)
+            //if(output[i]< Nf)
             { //if current geortzel level is below noise floor, test it for noise, before deciding it's a 'key up' state
-                if (i >= 64 && i < (ADC_SAMPLE_CNT- 64))
+                if (i < (ADC_SAMPLE_CNT- 64))
                 {
-                    if (output[i - 64] >= Nf && output[i + 64] >= Nf)
+                    //if (output[i - 64] >= Nf && output[i + 64] >= Nf)
+                    //if (lastVal >= Nf && (output[i + 64] >= Nf || output[i + 1] >= Nf))
+                    if ((lastVal >= Nf && ((output[i + 64] >= Nf) || (keydwn == 1.0f))) || (keydwn == 1.0f && output[i + 64]/Nf > 0.7f))
                     { //check neighbors, if they are also High, then consider this is noise & maintain key down state
                         keydwn = 1.0f;
+                        exitCd = 0;
                     }
                     else
                     {
+                        exitCd = 1;
+                        if (lastVal >= Nf) exitFgs += 1;
+                        if ( output[i + 64]/Nf > 0.7f) exitFgs += 2;
+                        if (keydwn == 1.0f) exitFgs += 4;
                         keydwn = 0.0f;
+
                     }
                 }
                 else if (i == 0 && keydwn == 1.0f && output[i + 64] >= Nf)
                 { //if we were in a key down state, and the next sample is high, maintain key down state
                     keydwn = 1.0f;
+                    exitCd = 2;
                 }
-                else // were at the beginning or end of the buffer, so just assume it's noise & assign it key up state
+                else // were at the begining or end of the buffer, so just assume it's noise & assign it key up state
                 {
-                    keydwn = 0.0f;
+                    if(i==960 && keydwn == 1.0f && output[i]/Nf > 0.7f)
+                    { //if we were in a key down state, and at the end of buffer and the this sample is within 70% of noise floor, so maintain key down state
+                        keydwn = 1.0f;
+                        exitCd = 3;
+                    } 
+                    else
+                    {
+                        keydwn = 0.0f;
+                        exitCd = 4;        
+                    }
+                    
+                    
                 }
             }
-            else{
+            else{ //output[i]>= Nf
 
                 if (i >= 64 && i < (ADC_SAMPLE_CNT- 64))
                 {
-                    if (output[i - 64] < Nf && output[i + 64] < Nf)
+                    //if (output[i - 64] < Nf && output[i + 64] < Nf)
+                    if (lastVal < Nf && output[i + 64]/Nf < 0.65f)
+                    //if (lastVal < Nf && ((output[i + 64] < Nf) || (keydwn == 0.0f)))
                     { //check neighbors, if they are also low, then consider this is noise & maintain key up state
+                        
+                        exitCd = 5;
+                        if (lastVal < Nf) exitFgs += 1;
+                        if (output[i + 64]/Nf < 0.65f) exitFgs += 2;
+                        if (keydwn == 0.0f) exitFgs += 4;
                         keydwn = 0.0f;
                     }
                     else
                     {
                         keydwn = 1.0f;
+                        exitCd = 6;
                     }
                 }
                 else if (i == 0 && keydwn == 0.0f && output[i + 64] < Nf)
                 { //if we were in a key down state, and the next sample is high, maintain key down state
                     keydwn = 0.0f;
+                    exitCd = 7;
                 }
                 
                 else // were at the beginning or end of the buffer, so just assume it's a valid key down state
                 {
                     keydwn = 1.0f;
+                    exitCd = 8;
                 }
             }
-            Goertzel_lvl = (0.3*Goertzel_lvl) + (0.7*output[i]);
+            //Goertzel_lvl = (0.3*Goertzel_lvl) + (0.7*output[i]);
             //Blue (keydwn * gain), Red (output), Green (S), Orange (Sqlcthresh), Purple (Nf)
-            if (PlotMode == 1) printf("%0.0f %0.0f %0.0f %0.0f %0.0f\n", (110 * keydwn * gain), Goertzel_lvl, SignalMag, Sqlcthresh, Nf);
+            
+            int NxtVal = 0;
+            if(i+64<FFT_SIZE-1) NxtVal = (int)output[i + 64];
+            if (PlotMode == 1)
+            {
+                //printf("%0.0f %0.0f %0.0f %0.0f %0.0f %d %d %d %d %d\n", (110 * keydwn * gain), output[i], SignalMag, Sqlcthresh, Nf, exitCd, (int)exitFgs, i, (int)lastVal, NxtVal);
+                printf("%0.0f %0.0f %0.0f %0.0f %0.0f\n", (110 * keydwn * gain), Goertzel_lvl, SignalMag, Sqlcthresh, Nf);
+            } 
+            //lastVal = output[i];
+            lastVal = Goertzel_lvl;
+
         }
         if(i2s_pdm_running) {
             curMag = 8*fabsf(Goertzel_lvl);

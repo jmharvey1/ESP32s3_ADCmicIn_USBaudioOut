@@ -283,15 +283,15 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
             tp->data.coords[i].x = ((uint16_t)buf[(i * 8) + 3] << 8) + buf[(i * 8) + 2];
             tp->data.coords[i].y = (((uint16_t)buf[(i * 8) + 5] << 8) + buf[(i * 8) + 4]);
             tp->data.coords[i].strength = (((uint16_t)buf[(i * 8) + 7] << 8) + buf[(i * 8) + 6]);
-            if(tp->data.coords[i].strength>0){
-                PrntLog = true;
-                sprintf(LogBuf,"%d. strength = %d\n", i, (int)tp->data.coords[i].strength);
-            }
+            // if(tp->data.coords[i].strength>0){
+            //     PrntLog = true;
+            //     sprintf(LogBuf,"%d. strength = %d\n", i, (int)tp->data.coords[i].strength);
+            // }
         }
 
         portEXIT_CRITICAL(&tp->data.lock);
     }
-    if(PrntLog) printf(LogBuf); //JMH 20251215 this entry stopped false button click events (why, don't know, but does)
+    //if(PrntLog) printf(LogBuf); //JMH 20251215 this entry stopped false button click events (why, don't know, but does)
     return ESP_OK;
 }
 

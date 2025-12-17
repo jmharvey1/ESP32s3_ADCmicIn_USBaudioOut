@@ -250,7 +250,7 @@ static void btn3_event_handler(lv_event_t * e)
         uint16_t interval = (uint16_t)(EvntStart - LastStart1);
         LastStart1 = EvntStart;
         if(interval< 500) return;
-        printf(" BTN3 event code %d\n", (int)code);
+        //printf(" BTN3 event code %d\n", (int)code);
         PlotMode++;
         if(PlotMode > 1) PlotMode = 0;
         //nvs_suprt2.nvs_write_val("AudioOutMode", AudioOutMode);
@@ -260,7 +260,7 @@ static void btn3_event_handler(lv_event_t * e)
         }
         else{
             lv_label_set_text(Btn3_label, "Plot ON");
-            printf("gain Goertzel_lvl SignalMag Sqlcthresh Nf \n");
+            //printf("gain Goertzel_lvl SignalMag Sqlcthresh Nf \n");
         }
         lvgl_port_lock(-1);
         lv_display_refr_timer(NULL);
@@ -501,7 +501,7 @@ void Bld_Scope_scrn(void)
         lv_obj_set_x(ui_Label3, -150);
         lv_obj_set_y(ui_Label3, +225);
         lv_obj_set_align(ui_Label3, LV_ALIGN_CENTER);
-        lv_label_set_text(ui_Label3, "ESP32s3 CW/SSB Noise Filter     Date: Dec 16, 2025");
+        lv_label_set_text(ui_Label3, "ESP32s3 CW/SSB Noise Filter     Date: Dec 17, 2025");
     }
 
     lv_scr_load(ui_Scope);
