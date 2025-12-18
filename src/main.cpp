@@ -1199,7 +1199,7 @@ void app_main()
         }
         i2s_pdm_running = true;
         // Create I2S write task
-        xTaskCreatePinnedToCore(i2s_write_task, "i2s_write_task", 2048, NULL, 5, &i2s_task_handle, 0);
+        xTaskCreatePinnedToCore(i2s_write_task, "i2s_write_task", 2048, NULL, 5, &i2s_task_handle, 1);
     }
     else
     {

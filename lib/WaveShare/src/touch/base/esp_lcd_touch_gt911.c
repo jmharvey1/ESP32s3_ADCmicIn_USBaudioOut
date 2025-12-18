@@ -217,7 +217,9 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
     //printf(LogBuf);
     CalerID = 1;
     err = touch_gt911_i2c_read(tp, ESP_LCD_TOUCH_GT911_READ_XY_REG, buf, 1);//-> found in this same file
-    //vTaskDelay(pdMS_TO_TICKS(2));//JMH ADD
+    if(err != ESP_OK){
+        printf("esp_lcd_touch_gt911_read_data: I2C read error, CalerID=%d\n", CalerID);
+    }
     ESP_RETURN_ON_ERROR(err, TAG, "I2C read error!");
      //  sprintf(LogBuf,"esp_lcd_touch_gt911_read_data(%p) - Step 1 Complete\n", *((void **)&tp));//JMH ADD
     
@@ -266,6 +268,9 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
         /* Read all points */
         CalerID = 3; //JMH ADD
         err = touch_gt911_i2c_read(tp, ESP_LCD_TOUCH_GT911_READ_XY_REG + 1, &buf[1], touch_cnt * 8);
+        if(err != ESP_OK){
+        printf("esp_lcd_touch_gt911_read_data: I2C read error, CalerID=%d\n", CalerID);
+        }
         ESP_RETURN_ON_ERROR(err, TAG, "I2C read error!");
 
         /* Clear all */
