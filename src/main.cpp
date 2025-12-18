@@ -85,6 +85,7 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 /*20251216 voice_nr.cpp, added lvgl_port_lock() call to VoiceNR::feed() method to stop crashing when switching to
 NSNET2 filter*/
 /*20251217 More tweaks to Wiener filter logic */
+/*20251217 Moved I2s task to core 1 while keeping LVGL task on core 0 */
 #include <stdio.h>
 #include <inttypes.h>
 #include <cmath>
