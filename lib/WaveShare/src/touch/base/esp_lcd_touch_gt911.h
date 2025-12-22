@@ -45,6 +45,14 @@ esp_err_t esp_lcd_touch_new_i2c_gt911(const esp_lcd_panel_io_handle_t io, const 
 #define ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS          (0x5D)
 #define ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS_BACKUP   (0x14)
 
+/*JMH - Added for hardware reset of GT911 via EXIO2 (CH442G)*/
+#define CH422G_I2C_ADDR             0x40          // Check CH422G datasheet for correct I2C address
+
+// CH422G register addresses (consult CH422G datasheet for exact values)
+#define CH422G_REG_EXIO_DIR         0x04          // Example direction register address
+#define CH422G_REG_EXIO_OUT         0x05          // Example output register address
+#define CH422G_EXIO2_PIN_MASK       (1 << 2)      // Mask for EXIO2 pin (assuming it's the 3rd bit)
+
 /**
  * @brief Touch IO configuration structure
  *

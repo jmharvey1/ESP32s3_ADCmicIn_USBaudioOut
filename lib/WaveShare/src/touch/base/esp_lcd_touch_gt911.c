@@ -213,8 +213,7 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
     bool PrntLog = false;
     //sprintf(LogBuf,"esp_lcd_touch_gt911_read_data(%p) -   assert(tp != NULL)\n", *((void **)&tp));
     assert(tp != NULL);
-    //sprintf(LogBuf,"esp_lcd_touch_gt911_read_data(%p) - START\n", *((void **)&tp));//JMH ADD
-    //printf(LogBuf);
+    //err = touch_gt911_i2c_read(tp, ESP_LCD_TOUCH_GT911_READ_XY_REG, buf, 1);
     CalerID = 1;
     err = touch_gt911_i2c_read(tp, ESP_LCD_TOUCH_GT911_READ_XY_REG, buf, 1);//-> found in this same file
     if(err != ESP_OK){
@@ -222,7 +221,7 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
     }
     ESP_RETURN_ON_ERROR(err, TAG, "I2C read error!");
      //  sprintf(LogBuf,"esp_lcd_touch_gt911_read_data(%p) - Step 1 Complete\n", *((void **)&tp));//JMH ADD
-    
+    if(buf[0]!= 0x00) printf("esp_lcd_touch_gt911_read_data: buf[0]=0x%02X\n", buf[0]);//JMH ADD
     /* Any touch data? */
     if ((buf[0] & 0x80) == 0x00) {
         //  sprintf(LogBuf,"esp_lcd_touch_gt911_read_data(%p) - Step 2 Start\n", *((void **)&tp));//JMH ADD
@@ -284,7 +283,7 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
         tp->data.points = touch_cnt;
 
         /* Fill all coordinates */
-        for (i = 0; i < touch_cnt; i++) {
+        for (int i = 0; i < touch_cnt; i++) {
             tp->data.coords[i].x = ((uint16_t)buf[(i * 8) + 3] << 8) + buf[(i * 8) + 2];
             tp->data.coords[i].y = (((uint16_t)buf[(i * 8) + 5] << 8) + buf[(i * 8) + 4]);
             tp->data.coords[i].strength = (((uint16_t)buf[(i * 8) + 7] << 8) + buf[(i * 8) + 6]);
@@ -295,6 +294,9 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
         }
 
         portEXIT_CRITICAL(&tp->data.lock);
+        for (int i = 0; i < touch_cnt; i++) {
+            printf("%d. x: %d, y: %d, strength = %d\n", i, (int)tp->data.coords[i].x, (int)tp->data.coords[i].y, (int)tp->data.coords[i].strength);
+        }
     }
     //if(PrntLog) printf(LogBuf); //JMH 20251215 this entry stopped false button click events (why, don't know, but does)
     return ESP_OK;

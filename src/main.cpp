@@ -86,6 +86,7 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 NSNET2 filter*/
 /*20251217 More tweaks to Wiener filter logic */
 /*20251217 Moved I2s task to core 1 while keeping LVGL task on core 0 */
+/*20251222 added ch422g component from ESPHome to programatically reset gt911 */
 #include <stdio.h>
 #include <inttypes.h>
 #include <cmath>
@@ -1060,7 +1061,7 @@ static void uac_device_set_volume_cb(uint32_t volume, void *arg)
 
 void app_main()
 {
-    //vTaskDelay(pdMS_TO_TICKS(4000));
+    // vTaskDelay(pdMS_TO_TICKS(4000));
     printf("\napp_main: running IDF version: %s\n", esp_get_idf_version());
     char TxtBuf[60];
 
@@ -1094,7 +1095,12 @@ void app_main()
     
     Txt_GUI_init();
     
-    ///Bld_Scope_scrn();
+     /*Uncomment the following 'while' loop to see afe settings via USB serial monitor*/
+    // while (1)
+    // {
+    //     vTaskDelay(pdMS_TO_TICKS(5000));
+    // }
+    
     vTaskDelay(pdMS_TO_TICKS(50));
     // Initialize ESP Voice Noise Reduction AFE (nsnet2 noise suppression model)
     voiceNR.esp_sr_init();
@@ -1126,11 +1132,7 @@ void app_main()
     ESP_ERROR_CHECK(adc_continuous_register_event_callbacks(ADC_Hndl, &cbs, nullptr));
     ESP_ERROR_CHECK(adc_continuous_start(ADC_Hndl));
 
-    /*Uncomment the following 'while' loop to see afe settings via USB serial monitor*/
-    // while (1)
-    // {
-    //     vTaskDelay(pdMS_TO_TICKS(5000));
-    // }
+   
     vTaskDelay(pdMS_TO_TICKS(1000)); // this here to allow time for the I2C gt911 touch screen to report before starting USB
 
     if (AudioOutMode == 0) // set to 0 to enable I2S PDM TX mode; set to 1 to use USB UAC mode

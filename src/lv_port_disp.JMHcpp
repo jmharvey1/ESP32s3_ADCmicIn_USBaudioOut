@@ -25,8 +25,6 @@
 #include "esp_lcd_panel_rgb.h"
 #include "touch/base/esp_lcd_touch_gt911.h" //added for waveshare touch support
 #include "touch/base/esp_lcd_touch.h"
-#include "ch422g.h"
-#include "i2c_bus_esp_idf.h"
 //20250711 added the following to support latest I2C setup strategy
 #include "driver/i2c.h"
 #include "driver/gpio.h"
@@ -35,8 +33,6 @@
 #include "esp_check.h"
 /*Added the following for (input device) touch support*/
 #include "driver/i2c_master.h" //added for waveshare touch support
-//namespace i2c {
-//namespace ch422g {
 /*********************
  *      DEFINES
  *********************/
@@ -48,16 +44,8 @@
 #define I2C_MASTER_SCL_IO    GPIO_NUM_9  //GPIO_NUM_15  // Replace with your SCL pin
 #define I2C_MASTER_SDA_IO    GPIO_NUM_8   //GPIO_NUM_16  // Replace with your SDA pin
 #define I2C_MASTER_NUM       I2C_NUM_0    // I2C port 0
-//#define I2C_MASTER_FREQ_HZ   400000       // 400kHz
+#define I2C_MASTER_FREQ_HZ   400000       // 400kHz
 #define GT911_I2C_ADDR       0x5D         // Default I2C address, might be 0x14
-// CH422G Configuration - added for GT911 hardware reset via CH422G 20251217 JMH(KW4KD)
-#define I2C_MASTER_FREQ_HZ          100000        // I2C master clock frequency
-#define CH422G_I2C_ADDR             0x20          // Check CH422G datasheet for correct I2C address
-
-// CH422G register addresses (consult CH422G datasheet for exact values)
-#define CH422G_REG_EXIO_DIR         0x04          // Example direction register address
-#define CH422G_REG_EXIO_OUT         0x05          // Example output register address
-#define CH422G_EXIO2_PIN_MASK       (1 << 2)      // Mask for EXIO2 pin (assuming it's the 3rd bit)
 esp_lcd_touch_handle_t out_touch = NULL;
 
 /**********************
@@ -91,14 +79,11 @@ SemaphoreHandle_t RingBuf_semaphore = NULL;
 TaskHandle_t lvgl_task_handle = NULL;
 i2c_master_bus_handle_t i2c_master_bus_handle = NULL; // added here for waveshare touch support
 i2c_master_dev_handle_t Touch_dev_handle = NULL;
-i2c_master_dev_handle_t CH442G_dev_handle = NULL;
 esp_lcd_panel_io_handle_t tp_io_handle = NULL;
 static esp_lcd_touch_handle_t tp = NULL;
 lv_display_t * disp;
 static esp_lcd_panel_handle_t display_handle = NULL;
 //static esp_timer_handle_t lvgl_tick_timer;
-CH422GComponent ch422g;
-IDFI2CBus i2cbus;
 esp_lcd_touch_config_t lcd_touch_config = {
 	.x_max = MSGBX_LCD_H_RES,
 	.y_max = MSGBX_LCD_V_RES,
@@ -129,10 +114,8 @@ esp_lcd_touch_config_t lcd_touch_config = {
  * @brief Write a byte to a CH422G register
  */
 esp_err_t ch422g_write_reg(uint8_t reg_addr, uint8_t data) {
-     uint8_t write_buf[2] = {reg_addr, data};
-     uint8_t read_buf[2] = {0x00, 0x00};
-//     return i2c_master_write_to_device(I2C_MASTER_NUM, CH422G_I2C_ADDR, write_buf, sizeof(write_buf), portMAX_DELAY);
-       return i2c_master_transmit_receive(CH442G_dev_handle, write_buf, sizeof(write_buf), read_buf, sizeof(read_buf), -1); 
+    uint8_t write_buf[2] = {reg_addr, data};
+    return i2c_master_write_to_device(I2C_MASTER_NUM, CH422G_I2C_ADDR, write_buf, sizeof(write_buf), portMAX_DELAY);
 }
 /** Main entry point to this code**/
 void lv_port_disp_init(void)
@@ -201,8 +184,8 @@ void lv_port_disp_init(void)
 static void disp_init(void)
 {
     /*JMH code*/
-    static const char *TAG = "disp_init";
-    //esp_log_level_set("*", ESP_LOG_VERBOSE);     
+    static const char *TAG = "LVPortDisp::Init";
+         
 #if CONFIG_MSGBX_AVOID_TEAR_EFFECT_WITH_SEM
     ESP_LOGI(TAG, "Create semaphores");
     sem_vsync_end = xSemaphoreCreateBinary();
@@ -291,110 +274,79 @@ static void disp_init(void)
     ESP_LOGI(TAG, "Initialize RGB LCD Display");
     ESP_ERROR_CHECK(esp_lcd_panel_reset(display_handle));
     ESP_ERROR_CHECK(esp_lcd_panel_init(display_handle));
-    ESP_LOGI(TAG, "Turn on LCD backlight");
-    esp_log_level_set("*", ESP_LOG_VERBOSE);
 
-    /* now setup ch422g by 1st initializing i2c bus */
-    i2cbus.set_sda_pin(I2C_MASTER_SDA_IO);
-    i2cbus.set_scl_pin(I2C_MASTER_SCL_IO);
-    i2cbus.set_frequency(I2C_MASTER_FREQ_HZ);
-    i2cbus.set_scl_pullup_enabled(true);
-    i2cbus.set_sda_pullup_enabled(true);
-    i2cbus.set_timeout(1000 ); //1000 / portTICK_PERIOD_MS
-    i2cbus.set_scan(false); // JMH ADD 20251221
-    i2cbus.setup();//given that set_scan is true, this will also scan for devices on the i2c bus
-    i2cbus.dump_config();
-    i2cbus.get_bus_handle(&i2c_master_bus_handle); // will use this later to setup link gt911 touch device
-    
-    /* now setup ch422g */
-    ch422g.set_i2c_bus(&i2cbus);
-    ch422g.set_i2c_address(CH422G_I2C_ADDR); // JMH ADD 20251221
-    ch422g.pin_mode(2, FLAG_OUTPUT);
-    printf("ch422g pin Config - start\n");
-    /*EXIO pin hi/lo config ms 1111110 ls*/
-    /*starting with ls pin EXIO0 */
-    ch422g.digital_write((uint8_t)0, false); //EXIO0
-    printf("ch422g pin Config - EXIO0 LOW\n\n");
-    ch422g.digital_write(1, true); //EXIO1
-    printf("ch422g pin Config - EXIO1 HIGH\n\n");
-    ch422g.digital_write(2, true); //EXIO2
-    printf("ch422g pin Config - EXIO2 HIGH\n\n");
-    ch422g.digital_write(3, true); //EXIO3
-    printf("ch422g pin Config - EXIO3 HIGH\n\n");
-    ch422g.digital_write(4, true); //EXIO4
-    printf("ch422g pin Config - EXIO4 HIGH\n\n");
-    //ch422g.digital_write(5, true); //EXIO5
-    //printf("ch422g pin Config - EXIO5 HIGH\n\n");
-    ch422g.digital_write(6, true); //EXIO6
-    printf("ch422g pin Config - EXIO6 HIGH\n\n");
-    printf("ch422g.setup() - start\n");
-    ch422g.setup(); // JMH ADD 20251220
-    printf("ch422g.setup() - Complete\n");
-
-    ch422g.digital_write(1, false); //EXIO1
-    printf("ch422g pin Config - EXIO1 LOW\n\n");
-    vTaskDelay(pdMS_TO_TICKS(100));
-    ch422g.digital_write(1, true); //EXIO1
-    vTaskDelay(pdMS_TO_TICKS(200));
-    printf("ch422g pin Config - EXIO1 HIGH\n\n");
     
     /* start gt911 / i2c config setup */
     /* setup I2C link to GT911 touch sensor */
 
-    // i2c_master_bus_config_t i2c_mst_config = {
-    //     .i2c_port = I2C_NUM_0,
-    //     .sda_io_num = (gpio_num_t)I2C_MASTER_SDA_IO,
-    //     .scl_io_num = (gpio_num_t)I2C_MASTER_SCL_IO,
-    //     .clk_source = I2C_CLK_SRC_DEFAULT,  // I2C clock source
-    //     .glitch_ignore_cnt = 7,  // Glitch ignore count
-    //     .intr_priority = NULL,
-    //     .trans_queue_depth = 64,
-    //     .flags{
-    //         .enable_internal_pullup = true,  // Enable internal pull-ups
-    //         //.allow_pd = false, //power down in light sleep
-    //     },
-    // };
-    // ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &i2c_master_bus_handle));
-    ESP_LOGI(TAG, "Create I2C Master BUS - DONE");
+    i2c_master_bus_config_t i2c_mst_config = {
+        .i2c_port = I2C_NUM_0,
+        .sda_io_num = (gpio_num_t)I2C_MASTER_SDA_IO,
+        .scl_io_num = (gpio_num_t)I2C_MASTER_SCL_IO,
+        .clk_source = I2C_CLK_SRC_DEFAULT,  // I2C clock source
+        .glitch_ignore_cnt = 7,  // Glitch ignore count
+        .intr_priority = NULL,
+        .trans_queue_depth = 64,
+        .flags{
+            .enable_internal_pullup = true,  // Enable internal pull-ups
+            //.allow_pd = false, //power down in light sleep
+        },
+    };
     
-    // i2c_device_config_t ch442G_config = {
-    //     .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-    //     .device_address = CH422G_I2C_ADDR,
-    //     .scl_speed_hz = I2C_MASTER_FREQ_HZ,
-    // };
-    // ESP_ERROR_CHECK(i2c_master_bus_add_device(i2c_master_bus_handle, &ch442G_config, &CH442G_dev_handle));
-
-    // /* ESP_LOGI(TAG, "CH422G Device Added"); */
-    // ESP_LOGI(TAG, "Setting EXIO2 LOW");
-    //     // In a real scenario, you'd read the current output state, clear the bit, and write back.
-    //     // This is a simplified example:
-    // ch422g_write_reg(CH422G_REG_EXIO_OUT, 0x00 & (~CH422G_EXIO2_PIN_MASK)); 
-    // Wait for 100ms
-    vTaskDelay(pdMS_TO_TICKS(100));
+    // ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &i2c_master_bus_handle));
+    // ESP_LOGI(TAG, "Create I2C Master BUS - DONE");
+    
+    // /* 'i2c_master_bus_add_device' not needed here. Its done via 'esp_lcd_new_panel_io_i2c_v2()' */
+    // // i2c_device_config_t lcd_touch_panel_io_config = {
+	// // 	.dev_addr_length = I2C_ADDR_BIT_LEN_7,
+	// // 	.device_address = (0x5D), // GT911 chip address
+	// // 	.scl_speed_hz = 100000,
+	// // };
+	// // ESP_ERROR_CHECK(i2c_master_bus_add_device(i2c_master_bus_handle, &lcd_touch_panel_io_config, &Touch_dev_handle));
+    // // ESP_LOGI(TAG, "GT911 Device Added");
 
 
-    /* instantuate touch object */
-    ESP_LOGI(TAG, "Initialize GT911 I2C touch sensor");
-    esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG(); // defined in esp_lcd_touch_gt911.h
-    /*note the following, actually calls 'esp_lcd_new_panel_io_i2c_v2'.
-     As part of this call,'i2c_master_bus_add_device(tool_bus_handle, &i2c_dev_conf, &dev_handle)' gets done.
-     see esp_lcd_panel_io_i2c_v2.c for more detail*/
-    if (esp_lcd_new_panel_io_i2c_v2(i2c_master_bus_handle, &tp_io_config, &tp_io_handle) != ESP_OK)
-    {
-            //ESP_LOGE(TAG, "create GT911 touch interface FAILED");
-            while(1)
-            {
-                printf("touch controller GT911 setup FAILED\n");
-                vTaskDelay(pdMS_TO_TICKS(100));
-            }
-    }
-    else
-    {
-            ESP_LOGI(TAG, "touch interface handle %p", tp_io_handle);
-    }
-    ESP_LOGI(TAG, "Initialize/configure GT911 touch controller");
-    /*if the following works it will return/report 'TouchPad_ID' & 'TouchPad_Config_Version'*/
-    ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_gt911(tp_io_handle, &lcd_touch_config, &tp));//this is now handled in 'gt911_init()'
+    // /* instantuate touch object */
+    // ESP_LOGI(TAG, "Initialize GT911 I2C touch sensor");
+    // esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG(); // defined in esp_lcd_touch_gt911.h
+    // /*Send hardware reset to GT911*/
+    // // Configure CH442G to send reset signal on EXIO2 JMH Added using copilot 20251218
+    // // ESP_LOGI(TAG, "Starting CH422G EXIO2 configuration for GT911 reset");
+    // // Configure EXIO2 as output (Need to read, modify, and write back the direction register)
+    // // This part assumes a specific driver implementation to handle read/modify/write atomically.
+    // // For manual control, we first assume a default output config or handle it via driver.
+    // // Assuming we can directly write to the output register for simplicity.
+    // //ESP_ERROR_CHECK(ch422g_write_reg(0x0B, 0x04)); // Set EXIO2 as output
+    // //ESP_ERROR_CHECK(ch422g_write_reg(CH422G_REG_EXIO_OUT, 0x00 & (~CH422G_EXIO2_PIN_MASK)));
+    // // Set EXIO2 low to reset GT911
+    // //ESP_ERROR_CHECK(ch422g_write_reg(0x08, 0x00));
+    // // vTaskDelay(pdMS_TO_TICKS(100)); // Hold reset low for 100 ms
+    // // Set EXIO2 high to release GT911 from reset
+    // //ESP_ERROR_CHECK(ch422g_write_reg(0x08, 0x04));
+    // //ESP_ERROR_CHECK(ch422g_write_reg(CH422G_REG_EXIO_OUT, 0xFF | CH422G_EXIO2_PIN_MASK)); // Set EXIO2 high
+    // //vTaskDelay(pdMS_TO_TICKS(50)); // Wait for GT911 to initialize
+    // //ESP_LOGI(TAG, "CH422G EXIO2 configuration for GT911 reset complete");
+    
+    
+    // /*note the following, actually calls 'esp_lcd_new_panel_io_i2c_v2'.
+    //  As part of this call,'i2c_master_bus_add_device(tool_bus_handle, &i2c_dev_conf, &dev_handle)' gets done.
+    //  see esp_lcd_panel_io_i2c_v2.c for more detail*/
+    // if (esp_lcd_new_panel_io_i2c_v2(i2c_master_bus_handle, &tp_io_config, &tp_io_handle) != ESP_OK)
+    // {
+    //         //ESP_LOGE(TAG, "create GT911 touch interface FAILED");
+    //         while(1)
+    //         {
+    //             printf("touch controller GT911 setup FAILED\n");
+    //             vTaskDelay(pdMS_TO_TICKS(100));
+    //         }
+    // }
+    // else
+    // {
+    //         ESP_LOGI(TAG, "touch interface handle %p", tp_io_handle);
+    // }
+    // ESP_LOGI(TAG, "Initialize/configure GT911 touch controller");
+    // /*if the following works it will return/report 'TouchPad_ID' & 'TouchPad_Config_Version'*/
+    // ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_gt911(tp_io_handle, &lcd_touch_config, &tp));//this is now handled in 'gt911_init()'
     lvgl_semaphore = xSemaphoreCreateMutex();
     RingBuf_semaphore = xSemaphoreCreateMutex();// JMH ADD 20250717
     ESP_LOGI(TAG, "Initialize LVGL library");
@@ -501,7 +453,7 @@ static void touchpad_read_cb(lv_indev_t * indev_drv, lv_indev_data_t * data)
     //esp_lcd_touch_handle_t tp = (esp_lcd_touch_handle_t)drv->user_data;
     /*have to 1st read/update the touch data, before it can be analyzed*/
     //printf("i2c read touch Start\n");
-    tp->read_data(tp);
+    tp->read_data(tp); // JMH: this calls 'esp_lcd_touch_gt911_read_data()' in esp_lcd_touch_gt911.c
    
     /*Test & Save the pressed coordinates and the state*/
     //esp_lcd_touch_get_coordinates(esp_lcd_touch_handle_t tp, uint16_t *x, uint16_t *y, uint16_t *strength, uint8_t *track_id, uint8_t *point_num, uint8_t max_point_num)
@@ -569,5 +521,3 @@ static void lvgl_port_task(void *arg)
     }
 }
 
-//} // namespace ch422g
-//}  // namespace i2c

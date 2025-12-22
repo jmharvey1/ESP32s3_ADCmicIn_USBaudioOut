@@ -178,7 +178,7 @@ static void btn1_event_handler(lv_event_t * e)
         // if(interval< 1000) return;
         FilterMode++;
         if(FilterMode > 3) FilterMode = 0;
-        // printf(" BTN1 event code %d; FilterMode %d , interval %d\n", (int)code, FilterMode, (int)interval);
+        printf("BTN1 event code %d; FilterMode %d , interval %d\n\n", (int)code, FilterMode, (int)interval);
         switch (FilterMode){
             case 0:
                 DSP_ON = false;
@@ -501,7 +501,7 @@ void Bld_Scope_scrn(void)
         lv_obj_set_x(ui_Label3, -150);
         lv_obj_set_y(ui_Label3, +225);
         lv_obj_set_align(ui_Label3, LV_ALIGN_CENTER);
-        lv_label_set_text(ui_Label3, "ESP32s3 CW/SSB Noise Filter     Date: Dec 17, 2025");
+        lv_label_set_text(ui_Label3, "ESP32s3 CW/SSB Noise Filter     Date: Dec 22, 2025");
     }
 
     lv_scr_load(ui_Scope);
