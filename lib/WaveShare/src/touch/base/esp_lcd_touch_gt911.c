@@ -102,7 +102,7 @@ esp_err_t esp_lcd_touch_new_i2c_gt911(const esp_lcd_panel_io_handle_t io, const 
     /* Only supported callbacks are set */
     esp_lcd_touch_gt911->read_data = esp_lcd_touch_gt911_read_data;
     esp_lcd_touch_gt911->get_xy = esp_lcd_touch_gt911_get_xy;
-    printf(" esp_lcd_touch_gt911->read_data %p; esp_lcd_touch_gt911->get_xy %p  \n",  *((void **)&esp_lcd_touch_gt911->read_data),  *((void **)&esp_lcd_touch_gt911->get_xy));//JMH ADD
+    ESP_LOGV(TAG, " esp_lcd_touch_gt911->read_data %p; esp_lcd_touch_gt911->get_xy %p  \n",  *((void **)&esp_lcd_touch_gt911->read_data),  *((void **)&esp_lcd_touch_gt911->get_xy));//JMH ADD
 #if (CONFIG_ESP_LCD_TOUCH_MAX_BUTTONS > 0)
     esp_lcd_touch_gt911->get_button_state = esp_lcd_touch_gt911_get_button_state;
 #endif
@@ -217,11 +217,11 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
     CalerID = 1;
     err = touch_gt911_i2c_read(tp, ESP_LCD_TOUCH_GT911_READ_XY_REG, buf, 1);//-> found in this same file
     if(err != ESP_OK){
-        printf("esp_lcd_touch_gt911_read_data: I2C read error, CalerID=%d\n", CalerID);
+        ESP_LOGV(TAG, "esp_lcd_touch_gt911_read_data: I2C read error, CalerID=%d", CalerID);
     }
     ESP_RETURN_ON_ERROR(err, TAG, "I2C read error!");
      //  sprintf(LogBuf,"esp_lcd_touch_gt911_read_data(%p) - Step 1 Complete\n", *((void **)&tp));//JMH ADD
-    if(buf[0]!= 0x00) printf("esp_lcd_touch_gt911_read_data: buf[0]=0x%02X\n", buf[0]);//JMH ADD
+    if(buf[0]!= 0x00) ESP_LOGV(TAG, "esp_lcd_touch_gt911_read_data: buf[0]=0x%02X", buf[0]);//JMH ADD
     /* Any touch data? */
     if ((buf[0] & 0x80) == 0x00) {
         //  sprintf(LogBuf,"esp_lcd_touch_gt911_read_data(%p) - Step 2 Start\n", *((void **)&tp));//JMH ADD
@@ -268,7 +268,7 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
         CalerID = 3; //JMH ADD
         err = touch_gt911_i2c_read(tp, ESP_LCD_TOUCH_GT911_READ_XY_REG + 1, &buf[1], touch_cnt * 8);
         if(err != ESP_OK){
-        printf("esp_lcd_touch_gt911_read_data: I2C read error, CalerID=%d\n", CalerID);
+        ESP_LOGV(TAG, "esp_lcd_touch_gt911_read_data: I2C read error, CalerID=%d", CalerID);
         }
         ESP_RETURN_ON_ERROR(err, TAG, "I2C read error!");
 
@@ -295,7 +295,7 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
 
         portEXIT_CRITICAL(&tp->data.lock);
         for (int i = 0; i < touch_cnt; i++) {
-            printf("%d. x: %d, y: %d, strength = %d\n", i, (int)tp->data.coords[i].x, (int)tp->data.coords[i].y, (int)tp->data.coords[i].strength);
+           ESP_LOGV(TAG, "%d. x: %d, y: %d, strength = %d\n", i, (int)tp->data.coords[i].x, (int)tp->data.coords[i].y, (int)tp->data.coords[i].strength);
         }
     }
     //if(PrntLog) printf(LogBuf); //JMH 20251215 this entry stopped false button click events (why, don't know, but does)

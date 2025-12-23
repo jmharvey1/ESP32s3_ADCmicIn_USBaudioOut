@@ -37,6 +37,7 @@ lv_obj_t * Btn2_label;
 lv_obj_t * Btn3_label;
 /*Scope/chart variables*/
 static lv_obj_t *ui_Scope;
+static lv_obj_t *Btn3;
 static lv_obj_t *ui_Chart1;
 lv_chart_series_t *ui_Chart1_series_1 = NULL;
 static lv_obj_t *ui_Label1;
@@ -181,12 +182,15 @@ static void btn1_event_handler(lv_event_t * e)
         printf("BTN1 event code %d; FilterMode %d , interval %d\n\n", (int)code, FilterMode, (int)interval);
         switch (FilterMode){
             case 0:
+                lv_obj_clear_flag(Btn3, LV_OBJ_FLAG_HIDDEN);
                 DSP_ON = false;
                 TWO_STAGE = false;
                 ESP_SR = false;
                 lv_label_set_text(Btn1_label, "WIENER");
                 break;
             case 1:
+                lv_obj_add_flag(Btn3, LV_OBJ_FLAG_HIDDEN);
+                TWO_STAGE = false;
                 DSP_ON = true;
                 lv_label_set_text(Btn1_label, "NR OFF");
                 break;
@@ -260,7 +264,7 @@ static void btn3_event_handler(lv_event_t * e)
         }
         else{
             lv_label_set_text(Btn3_label, "Plot ON");
-            //printf("gain Goertzel_lvl SignalMag Sqlcthresh Nf \n");
+            printf("gain Goertzel_lvl SignalMag Sqlcthresh Nf \n");
         }
         lvgl_port_lock(-1);
         lv_display_refr_timer(NULL);
@@ -486,12 +490,12 @@ void Bld_Scope_scrn(void)
         // lv_label_set_text(Btn2_label, "IIR OFF");
         lv_obj_center(Btn2_label);
 
-        lv_obj_t *btn3 = lv_win_add_button(win2, LV_SYMBOL_DUMMY, 100);
-        lv_obj_add_event_cb(btn3, btn3_event_handler, LV_EVENT_ALL, NULL);
-        lv_obj_align(btn3, LV_ALIGN_CENTER, 0, -40);
-        lv_obj_remove_flag(btn3, LV_OBJ_FLAG_PRESS_LOCK);
+        Btn3 = lv_win_add_button(win2, LV_SYMBOL_DUMMY, 100);
+        lv_obj_add_event_cb(Btn3, btn3_event_handler, LV_EVENT_ALL, NULL);
+        lv_obj_align(Btn3, LV_ALIGN_CENTER, 0, -40);
+        lv_obj_remove_flag(Btn3, LV_OBJ_FLAG_PRESS_LOCK);
 
-        Btn3_label = lv_label_create(btn3);
+        Btn3_label = lv_label_create(Btn3);
         lv_label_set_text(Btn3_label, "Plot OFF");
         lv_obj_center(Btn3_label);
         // credit/info label

@@ -87,6 +87,7 @@ NSNET2 filter*/
 /*20251217 More tweaks to Wiener filter logic */
 /*20251217 Moved I2s task to core 1 while keeping LVGL task on core 0 */
 /*20251222 added ch422g component from ESPHome to programatically reset gt911 */
+/*20251223 Removed or hid some old debug comments */
 #include <stdio.h>
 #include <inttypes.h>
 #include <cmath>
