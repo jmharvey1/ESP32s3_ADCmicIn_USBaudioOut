@@ -49,10 +49,6 @@ commands needed to build/move the srmodels.bin file to the build directory & fla
 /*20251109 added display button to support swapping Audio Output modes I2s-PDM/USB-UAC 
 *        Note: to complete the swap, a 'reset', or 'power off/power on' operation has to follow the button selection
 */
-/* 20251115 Text2Dsply.cpp - Changed Button1 event detectioin to 'LV_EVENT_SHORT_CLICKED' to reduce false detections*/
-/* 20251107 Modified Wiener filter logic to better capture threshold setting */
-/* 20251108 More minor tweaks to Wiener filter noise detection logic */
-/* 20251109 Updated NSNET2 build/install notes to include Windows OS */
 // Best practices applied:
 // - Consistent naming conventions
 // - Proper use of const and static where appropriate
@@ -88,6 +84,7 @@ NSNET2 filter*/
 /*20251217 Moved I2s task to core 1 while keeping LVGL task on core 0 */
 /*20251222 added ch422g component from ESPHome to programatically reset gt911 */
 /*20251223 Removed or hid some old debug comments */
+/*20251226 More tweaks to Wiener filter logic */
 #include <stdio.h>
 #include <inttypes.h>
 #include <cmath>
@@ -154,6 +151,7 @@ float SignalMag = 0.0f;
 float Goertzel_lvl = 0.0f;
 float keydwn = 0.0f;
 float lastVal = 0;
+float Nf = 0.0f;
 static const char *TAG = "JMH Test";
 
 // Buffers
@@ -295,7 +293,7 @@ void estimate_noise(float *mag, int len) {
     //avgNoiseMag /= (56 - 44 + 1);
     avgNoiseMag /= 13.0f;
     //Sqlcthresh = avgNoiseMag * 4.0f; //set threshold for signal detection
-    Sqlcthresh =   (0.7*Sqlcthresh)+(0.3*(avgNoiseMag * 4.0f));
+    Sqlcthresh =   (0.7*Sqlcthresh)+(0.3*(avgNoiseMag * 4.0f));//4.0f; //set threshold for signal detection
 }
 
 void estimate_signal(float *mag, int len) {
@@ -317,7 +315,7 @@ void estimate_signal(float *mag, int len) {
     }
 }
 /*Note: 'output' is loaded with Goertzel magnitudes taken @ 4ms intervals*/
-void wiener_filter_process(float* input, float* output)
+void wiener_filter_process(float* input, float* output, float PkGoertzelVal)
 {
     //int N = FFT_SIZE;
     // Forward FFT
@@ -383,7 +381,6 @@ void wiener_filter_process(float* input, float* output)
         }
     }
     SignalMag = 0.4*SignalMag + 0.6*mag[PkFreqBin];
-    //float Nf = (mag[PkFreqBin + 10] + mag[PkFreqBin - 10]) / 2; // avoid notch frequencies;
     float avgNoiseMag = 0.0f;
     for (int i = 28; i <= 61; i++) {  //only consider noise bins between 437 & 953 Hz
         if(i == PkFreqBin) { 
@@ -394,8 +391,8 @@ void wiener_filter_process(float* input, float* output)
         }
     }
     avgNoiseMag /= 34.0f;
-    Sqlcthresh =   (0.7*Sqlcthresh)+(0.3*(avgNoiseMag * 4.0f));
-    float Nf = 2.5f * Sqlcthresh; //set noise floor estimate 
+    Sqlcthresh =   (0.7*Sqlcthresh)+(0.3*(avgNoiseMag * 6.0f));
+    //float Nf = 1.66f * Sqlcthresh;//2.5f * Sqlcthresh; //set noise floor estimate 
     float gain = 1.0f;
     if (SignalMag < Sqlcthresh)
     { //didn't find an obvious signal bin
@@ -415,6 +412,8 @@ void wiener_filter_process(float* input, float* output)
         if (i % 64 == 0)// just hit a new 4ms interval/geortzel tone value/level
         {
             cntr++;
+            if(SignalMag < Sqlcthresh) Nf = 0.975f * Nf + 0.025f *( 1.5f * output[i]);
+            else Nf = 0.975f * Nf + 0.025f *( 0.9f * SignalMag);
             Goertzel_lvl = (0.3*Goertzel_lvl) + (0.7*output[i]);
             if(Goertzel_lvl< Nf)
             //if(output[i]< Nf)
@@ -459,7 +458,7 @@ void wiener_filter_process(float* input, float* output)
                     
                 }
             }
-            else{ //output[i]>= Nf
+            else if(output[i] >= 0.6f * PkGoertzelVal) { //output[i]>= Nf
 
                 if (i >= 64 && i < (ADC_SAMPLE_CNT- 64))
                 {
@@ -485,12 +484,31 @@ void wiener_filter_process(float* input, float* output)
                     keydwn = 0.0f;
                     exitCd = 7;
                 }
-                
                 else // were at the beginning or end of the buffer, so just assume it's a valid key down state
                 {
                     keydwn = 1.0f;
                     exitCd = 8;
                 }
+                if ((Goertzel_lvl > 1.5 * Nf) && ((output[i + 64] >  1.5 * Nf) && (output[i + 128] >  1.5 * Nf))) // if current geortzel level is above 1.5 times the noise floor, then consider it's a 'key up' state
+                {                            // keydwn = 1.0f;
+                    keydwn = 1.0f;
+                    gain = 1.0f;
+                    exitCd = 9;
+                }
+                else
+                { 
+                    if (SignalMag < Sqlcthresh)
+                    { // didn't find an obvious signal bin
+                        keydwn = 0.0f;
+                        gain = 0.0f;
+                        exitCd = 10;
+                    }
+                }
+            }
+            else
+            {
+                //remain in previous keydwn state
+                exitCd = 11;
             }
             //Goertzel_lvl = (0.3*Goertzel_lvl) + (0.7*output[i]);
             //Blue (keydwn * gain), Red (output), Green (S), Orange (Sqlcthresh), Purple (Nf)
@@ -499,8 +517,8 @@ void wiener_filter_process(float* input, float* output)
             if(i+64<FFT_SIZE-1) NxtVal = (int)output[i + 64];
             if (PlotMode == 1)
             {
-                //printf("%0.0f %0.0f %0.0f %0.0f %0.0f %d %d %d %d %d\n", (110 * keydwn * gain), output[i], SignalMag, Sqlcthresh, Nf, exitCd, (int)exitFgs, i, (int)lastVal, NxtVal);
-                printf("%0.0f %0.0f %0.0f %0.0f %0.0f\n", (110 * keydwn * gain), Goertzel_lvl, SignalMag, Sqlcthresh, Nf);
+               //printf("%0.0f %0.0f %0.0f %0.0f %0.0f %d %d %d %d %d\n", (110 * keydwn * gain), output[i], SignalMag, Sqlcthresh, Nf, exitCd, (int)exitFgs, i, (int)lastVal, NxtVal);
+               printf("%0.0f %0.0f %0.0f %0.0f %0.0f\n", (110 * keydwn * gain), Goertzel_lvl, SignalMag, Sqlcthresh, Nf);
             } 
             //lastVal = output[i];
             lastVal = Goertzel_lvl;
@@ -693,6 +711,7 @@ void Read_ADC(void *param)
                         float w2 = 0;
                         int GoetzelCnt = 0;
                         int step = 0;
+                        float PkGoertzelVal = 0.0f;
                         // int FdBufPtr = 0;
                         DACdataCnt = ret_num / SOC_ADC_DIGI_RESULT_BYTES;
                         for (int i = 0; i < DACdataCnt; i++)
@@ -714,7 +733,7 @@ void Read_ADC(void *param)
                                 float real = w1 * a + w2 * c;
                                 float imag = (w1 * b + w2 * d);
                                 float magnitude = sqrtf(real * real + imag * imag) / 25.0f; // normalize
-                                //printf("%0.0f\n", magnitude);
+                                if(magnitude > PkGoertzelVal) PkGoertzelVal = magnitude;
                                 /*Reset Goertzel for next block*/
                                 GoetzelCnt = 0;
                                 w1 = w2 = 0.0f;
@@ -728,7 +747,7 @@ void Read_ADC(void *param)
                             // printf("%d; %f\n", i, fft_Cmplx[2*i]);
                         }
                         // This dataset is ready, Apply Wiener filter
-                        wiener_filter_process(fft_Cmplx, output_buffer);
+                        wiener_filter_process(fft_Cmplx, output_buffer, PkGoertzelVal);
                         /*Ensure we're not going to overwrite what hasn't been sent (to USB) yet*/
                         // bool ovrlp = true;
                         // int RingBufPtrMax = RingBufPtr + (2* FFT_SIZE);
