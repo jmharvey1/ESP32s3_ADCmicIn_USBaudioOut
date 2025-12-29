@@ -505,7 +505,7 @@ void Bld_Scope_scrn(void)
         lv_obj_set_x(ui_Label3, -150);
         lv_obj_set_y(ui_Label3, +225);
         lv_obj_set_align(ui_Label3, LV_ALIGN_CENTER);
-        lv_label_set_text(ui_Label3, "ESP32s3 CW/SSB Noise Filter     Date: Dec 26, 2025");
+        lv_label_set_text(ui_Label3, "ESP32s3 CW/SSB Noise Filter     Date: Dec 29, 2025");
     }
 
     lv_scr_load(ui_Scope);

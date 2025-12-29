@@ -85,6 +85,7 @@ NSNET2 filter*/
 /*20251222 added ch422g component from ESPHome to programatically reset gt911 */
 /*20251223 Removed or hid some old debug comments */
 /*20251226 More tweaks to Wiener filter logic */
+/*20251229 More tweaks to Wiener filter logic */
 #include <stdio.h>
 #include <inttypes.h>
 #include <cmath>
@@ -150,6 +151,8 @@ float Sqlcthresh = 100.0f;
 float SignalMag = 0.0f;
 float Goertzel_lvl = 0.0f;
 float keydwn = 0.0f;
+float lastKeydwn = 0.0f;
+float gain = 0.0f;
 float lastVal = 0;
 float Nf = 0.0f;
 static const char *TAG = "JMH Test";
@@ -392,8 +395,8 @@ void wiener_filter_process(float* input, float* output, float PkGoertzelVal)
     }
     avgNoiseMag /= 34.0f;
     Sqlcthresh =   (0.7*Sqlcthresh)+(0.3*(avgNoiseMag * 6.0f));
-    //float Nf = 1.66f * Sqlcthresh;//2.5f * Sqlcthresh; //set noise floor estimate 
-    float gain = 1.0f;
+    float lastgain = gain;
+    gain = 1.0f;
     if (SignalMag < Sqlcthresh)
     { //didn't find an obvious signal bin
         gain = 0.0f; // suppress very low signal bins
@@ -409,27 +412,54 @@ void wiener_filter_process(float* input, float* output, float PkGoertzelVal)
     uint8_t exitFgs = 0;
     for (int i = 0; i < FFT_SIZE; i++)
     {
+        if(i!= 0) lastgain = gain;
         if (i % 64 == 0)// just hit a new 4ms interval/geortzel tone value/level
         {
             cntr++;
-            if(SignalMag < Sqlcthresh) Nf = 0.975f * Nf + 0.025f *( 1.5f * output[i]);
+            exitFgs = 0;
+            if((SignalMag < (1.2f * Sqlcthresh)) && (SignalMag > (0.8f * Sqlcthresh))) Nf = Nf;//hold noise floor steady
+            else if(SignalMag < Sqlcthresh) Nf = 0.975f * Nf + 0.025f *( 1.5f * output[i]);
             else Nf = 0.975f * Nf + 0.025f *( 0.9f * SignalMag);
             Goertzel_lvl = (0.3*Goertzel_lvl) + (0.7*output[i]);
             if(Goertzel_lvl< Nf)
             //if(output[i]< Nf)
-            { //if current geortzel level is below noise floor, test it for noise, before deciding it's a 'key up' state
+            { //the current geortzel level is below noise floor, test it for noise, before deciding it's a true 'key up' state
                 if (i < (ADC_SAMPLE_CNT- 64))
                 {
                     //if (output[i - 64] >= Nf && output[i + 64] >= Nf)
                     //if (lastVal >= Nf && (output[i + 64] >= Nf || output[i + 1] >= Nf))
-                    if ((lastVal >= Nf && ((output[i + 64] >= Nf) || (keydwn == 1.0f))) || (keydwn == 1.0f && output[i + 64]/Nf > 0.7f))
-                    { //check neighbors, if they are also High, then consider this is noise & maintain key down state
+                    if ((lastVal >= Nf && ((output[i + 64] >= Nf && keydwn == 1.0f) || (keydwn == 1.0f && output[i + 64]/Nf > 0.7f))))
+                    { //check neighbors, if they are both High, then consider this is a noise glitch & maintain key down state
                         keydwn = 1.0f;
                         exitCd = 0;
                     }
-                    else
+                    else if(gain ==1 &&(output[i + 64] >= Nf || (lastVal >= Nf)))
                     {
-                        exitCd = 1;
+                        /*set flags*/
+                        if (lastVal >= Nf)
+                            exitFgs += 1;
+                        if (output[i + 64] >= Nf)
+                            exitFgs += 2;
+                        if (keydwn == 1.0f)
+                            exitFgs += 4;
+                        /*Now decide which exit code to use*/
+                        if(keydwn == 0.0f && (output[i]/Nf > 1.3f)){
+                            keydwn = 1.0f;
+                            exitCd = 1; //switch to key down state since This a significant signal and at least one neighbor is high
+                        }
+                        else if(keydwn == 1.0f){
+                            keydwn = 1.0f;
+                            exitCd = 2; //remain in key down state since gain is one and at least one neighbor is high
+                        }
+                        else
+                        {
+                            exitCd = 3;
+                            keydwn = 0.0f;
+                        }
+                    }
+                    else
+                    { // its a true key up state
+                        exitCd = 4;
                         if (lastVal >= Nf) exitFgs += 1;
                         if ( output[i + 64]/Nf > 0.7f) exitFgs += 2;
                         if (keydwn == 1.0f) exitFgs += 4;
@@ -438,81 +468,112 @@ void wiener_filter_process(float* input, float* output, float PkGoertzelVal)
                     }
                 }
                 else if (i == 0 && keydwn == 1.0f && output[i + 64] >= Nf)
-                { //if we were in a key down state, and the next sample is high, maintain key down state
+                { //since we were in a key down state, and the next sample is high, maintain key down state
                     keydwn = 1.0f;
-                    exitCd = 2;
+                    exitCd = 5;
                 }
                 else // were at the begining or end of the buffer, so just assume it's noise & assign it key up state
                 {
                     if(i==960 && keydwn == 1.0f && output[i]/Nf > 0.7f)
                     { //if we were in a key down state, and at the end of buffer and the this sample is within 70% of noise floor, so maintain key down state
                         keydwn = 1.0f;
-                        exitCd = 3;
+                        exitCd = 6;
                     } 
                     else
                     {
-                        keydwn = 0.0f;
-                        exitCd = 4;        
+                        if(keydwn == 1.0f && i == 960){
+                            //this is the last sample in this set, and we were in a key down state, so maintain key down state
+                            keydwn = 1.0f;
+                            exitCd = 7;    
+                        }
+                        else{
+                            keydwn = 0.0f;
+                            exitCd = 8;
+                        }        
                     }
                     
                     
                 }
             }
             else if(output[i] >= 0.6f * PkGoertzelVal) { //output[i]>= Nf
-
-                if (i >= 64 && i < (ADC_SAMPLE_CNT- 64))
+                // this Goertzel sample is in the upper 60% of the peak geortzel level, so consider it's a valid signal,
+                // and test neighbors to confirm it's a true 'key down' state
+                if (i < (ADC_SAMPLE_CNT- 64))
                 {
-                    //if (output[i - 64] < Nf && output[i + 64] < Nf)
-                    if (lastVal < Nf && output[i + 64]/Nf < 0.65f)
-                    //if (lastVal < Nf && ((output[i + 64] < Nf) || (keydwn == 0.0f)))
-                    { //check neighbors, if they are also low, then consider this is noise & maintain key up state
-                        
-                        exitCd = 5;
-                        if (lastVal < Nf) exitFgs += 1;
-                        if (output[i + 64]/Nf < 0.65f) exitFgs += 2;
-                        if (keydwn == 0.0f) exitFgs += 4;
+                    if (i == 0 && keydwn == 0.0f && output[i + 64] < Nf)
+                    { // if we were in a key up state, and the next sample is low, maintain key up state
+                        keydwn = 0.0f;
+                        exitCd = 9;
+                    }
+                    // we have neighbors to to the left and right to compare to
+                    else if(lastVal < Nf && output[i + 64] / Nf < 0.65f)
+                    { // check neighbors, if they are both low, then consider this is noise & maintain key up state
+
+                        exitCd = 10;
+                        if (lastVal < Nf)
+                            exitFgs += 1;
+                        if (output[i + 64] / Nf < 0.65f)
+                            exitFgs += 2;
+                        if (keydwn == 0.0f)
+                            exitFgs += 4;
                         keydwn = 0.0f;
                     }
                     else
-                    {
+                    { // at least one neighbor is high, so consider it's a valid 'key down' state
+                        if((gain == 0.0f) && (output[i] >= 2.2f * Nf) && (lastKeydwn == 1.0f || output[i + 64] >= Nf)) {
                         keydwn = 1.0f;
-                        exitCd = 6;
+                        gain = 1.0f;
+                        exitCd = 11;
+                        }
+                        else if(gain == 0.0f) {
+                            keydwn = 0.0f;
+                            exitCd = 12; //remain in key up state since gain is zero
+                        }
+                        else {
+                            // GAIN is one, so decide based on neighbors
+                            if(keydwn == 0.0f && output[i]/Nf < 1.6f) {
+                                keydwn = 0.0f;
+                                exitCd = 13; //remain in key up state and not a really significantly loud signal
+                            }
+                            else {
+                            keydwn = 1.0f;
+                            exitCd = 14;
+                            }
+                        }
                     }
                 }
-                else if (i == 0 && keydwn == 0.0f && output[i + 64] < Nf)
-                { //if we were in a key down state, and the next sample is high, maintain key down state
-                    keydwn = 0.0f;
-                    exitCd = 7;
-                }
-                else // were at the beginning or end of the buffer, so just assume it's a valid key down state
+                else // were at the end of the buffer, so just assume it's a valid key down state
                 {
                     keydwn = 1.0f;
-                    exitCd = 8;
+                    exitCd = 15;
                 }
-                if ((Goertzel_lvl > 1.5 * Nf) && ((output[i + 64] >  1.5 * Nf) && (output[i + 128] >  1.5 * Nf))) // if current geortzel level is above 1.5 times the noise floor, then consider it's a 'key up' state
-                {                            // keydwn = 1.0f;
-                    keydwn = 1.0f;
-                    gain = 1.0f;
-                    exitCd = 9;
-                }
-                else
-                { 
-                    if (SignalMag < Sqlcthresh)
-                    { // didn't find an obvious signal bin
-                        keydwn = 0.0f;
-                        gain = 0.0f;
-                        exitCd = 10;
-                    }
-                }
+
+                // if ((Goertzel_lvl > 1.5 * Nf) && ((output[i + 64] >  1.5 * Nf)))// && (output[i + 128] >  1.5 * Nf))) // if current geortzel level is above 1.5 times the noise floor, then consider it's a 'key up' state
+                // {                            // keydwn = 1.0f;
+                //     keydwn = 1.0f;
+                //     gain = 1.0f;
+                //     exitCd = 9;
+                // }
+                // else
+                // { 
+                //     if (SignalMag < Sqlcthresh)
+                //     { // didn't find an obvious signal bin
+                //         keydwn = 0.0f;
+                //         gain = 0.0f;
+                //         exitCd = 10;
+                //     }
+                // }
             }
             else
             {
                 //remain in previous keydwn state
-                exitCd = 11;
+                keydwn = lastKeydwn;
+                gain = lastgain;
+                exitCd = 16;
             }
             //Goertzel_lvl = (0.3*Goertzel_lvl) + (0.7*output[i]);
             //Blue (keydwn * gain), Red (output), Green (S), Orange (Sqlcthresh), Purple (Nf)
-            
+            lastKeydwn = keydwn * gain;
             int NxtVal = 0;
             if(i+64<FFT_SIZE-1) NxtVal = (int)output[i + 64];
             if (PlotMode == 1)
