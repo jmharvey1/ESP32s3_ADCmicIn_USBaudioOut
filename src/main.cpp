@@ -433,7 +433,7 @@ void wiener_filter_process(float* input, float* output, float PkGoertzelVal)
                         keydwn = 1.0f;
                         exitCd = 0;
                     }
-                    else if(gain ==1 &&(output[i + 64] >= Nf || (lastVal >= Nf)))
+                    else if(gain == 1 &&(output[i + 64] >= Nf || (lastVal >= Nf)))
                     {
                         /*set flags*/
                         if (lastVal >= Nf)
@@ -525,8 +525,9 @@ void wiener_filter_process(float* input, float* output, float PkGoertzelVal)
                         gain = 1.0f;
                         exitCd = 11;
                         }
-                        else if(gain == 0.0f) {
-                            keydwn = 0.0f;
+                        else if(gain == 0.0f && output[i]> 1.2f * Nf && lastKeydwn == 1.0f){
+                            keydwn = 1.0f;
+                            gain = 1.0f;
                             exitCd = 12; //remain in key up state since gain is zero
                         }
                         else {
@@ -564,12 +565,17 @@ void wiener_filter_process(float* input, float* output, float PkGoertzelVal)
                 //     }
                 // }
             }
+            else if((output[i]< 0.7f*Nf ) )
+            { // didn't find an obvious signal bin
+                keydwn = 0.0f;
+                exitCd = 16;
+            }
             else
             {
                 //remain in previous keydwn state
                 keydwn = lastKeydwn;
                 gain = lastgain;
-                exitCd = 16;
+                exitCd = 17;
             }
             //Goertzel_lvl = (0.3*Goertzel_lvl) + (0.7*output[i]);
             //Blue (keydwn * gain), Red (output), Green (S), Orange (Sqlcthresh), Purple (Nf)
